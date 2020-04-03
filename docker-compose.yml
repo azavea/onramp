@@ -1,6 +1,6 @@
 version: "3.7"
 services:
-  onramp:
+  osmx:
     image: "osmx:latest"
     volumes:
       - type: bind
