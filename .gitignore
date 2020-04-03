@@ -1,0 +1,6 @@
+data/*
+!data/.gitkeep
+
+.vagrant
+ubuntu*.log
+

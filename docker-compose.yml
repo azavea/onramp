@@ -1,0 +1,8 @@
+version: "3.7"
+services:
+  osmx:
+    image: "osmx:latest"
+    volumes:
+      - type: bind
+        source: ./data
+        target: /data
