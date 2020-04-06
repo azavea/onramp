@@ -21,6 +21,3 @@ osmexpress :
 	cd vendor/OSMExpress && \
 	cmake -DCMAKE_BUILD_TYPE=Release . && \
 	make
-
-clean:
-	rm onramp

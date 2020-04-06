@@ -1,6 +1,5 @@
 data/*
 !data/.gitkeep
-build
 
 .vagrant
 ubuntu*.log
