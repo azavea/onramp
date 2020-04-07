@@ -1,48 +1,77 @@
-#include <vector>
-#include <iomanip>
 #include <iostream>
 
+#include "cxxopts.hpp"
+#include "osmium/handler.hpp"
+#include "osmium/io/any_input.hpp"
 #include "osmx/storage.h"
+
+#include "./osmx_update_handler.cpp"
 
 using namespace std;
 
-// Example of a very simple C++ program that uses osmx headers
-// to open a database, look up a way by ID, and assemble a WKT geometry from its nodes.
-// Usage: ./print_wkt OSMX_FILE WAY_ID
-
 int main(int argc, char* argv[]) {
-  vector<string> args(argv, argv+argc);
+  cxxopts::Options cmdoptions("OnRamp", "Generate augmented diff from osc change file.");
+  cmdoptions.add_options()
+    ("v,verbose", "Verbose output")
+    ("commit", "Commit the update")
+    ("osmx", ".osmx to update", cxxopts::value<string>())
+    ("osc", ".osc to apply", cxxopts::value<string>())
+    ("seqnum", "The sequence number of the .osc", cxxopts::value<string>())
+    ("timestamp", "The timestamp of the .osc", cxxopts::value<string>())
+  ;
 
-  // Opening a database: create an Environment, and then a Transaction within the environment.
-  MDB_env* env = osmx::db::createEnv(args[1]);
+  cmdoptions.parse_positional({"osmx","osc","seqnum","timestamp"});
+  auto result = cmdoptions.parse(argc, argv);
+
+  if (result.count("osmx") == 0 || result.count("osc") == 0 || \
+    result.count("seqnum") == 0 || result.count("timestamp") == 0) {
+    cout << "Usage: onramp OSMX_FILE OSC_FILE SEQNUM TIMESTAMP [OPTIONS]" << endl;
+    cout << "Generates aug diffs from osm change file before applying changes to osmx database." << endl << endl;
+    cout << "EXAMPLE:" << endl;
+    cout << " onramp planet.osmx 123456.osc 123456 2019-09-05T00:00:00Z --commit" << endl << endl;
+    cout << "OPTIONS:" << endl;
+    cout << " --v,--verbose: verbose output." << endl;
+    cout << " --commit: Actually commit the transaction; otherwise runs the update and rolls back." << endl;
+    exit(1);
+  }
+
+  string osmx = result["osmx"].as<string>();
+  string osc = result["osc"].as<string>();
+  bool verbose = result.count("verbose") > 0;
+  auto startTime = std::chrono::high_resolution_clock::now();
+
+  MDB_env* env = osmx::db::createEnv(osmx,true);
   MDB_txn* txn;
-  CHECK(mdb_txn_begin(env, NULL, MDB_RDONLY, &txn));
+  CHECK(mdb_txn_begin(env, NULL, 0, &txn));
 
-  // Create a Database handle for each element type within the Transaction.
-  osmx::db::Locations locations(txn);
-  osmx::db::Elements ways(txn,"ways");
+  string old_seqnum = "UNKNOWN";
+  auto new_seqnum = result["seqnum"].as<string>();
+  auto new_timestamp = result["timestamp"].as<string>();
+  osmx::db::Metadata metadata(txn);
+  if (verbose) cout << "Timestamp: " << metadata.get("osmosis_replication_timestamp") << endl;
+  old_seqnum = metadata.get("osmosis_replication_sequence_number");
 
-  // Fetch a Way element by ID.
-  auto message = ways.getReader(stol(args[2]));
-  auto way = message.getRoot<Way>();
+  if (verbose) cout << "Starting update from " << old_seqnum << " to " << new_seqnum << endl;
+  const osmium::io::File input_file{osc};
 
-  // Tags are stored as a vector of key,value.
-  // Iterate through all tags and print the value if key = name.
-  auto tags = way.getTags();
-  for (int i = 0; i < tags.size() / 2; i++) {
-    if (tags[i*2] == "name") cout << tags[i*2+1].cStr();
+  osmium::io::Reader reader{input_file, osmium::osm_entity_bits::object};
+  OsmxUpdateHandler handler(txn);
+  osmium::apply(reader, handler);
+
+  auto duration = (std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now() - startTime ).count()) / 1000.0;
+
+  if (result.count("commit") > 0) {
+    {
+      metadata.put("osmosis_replication_sequence_number",new_seqnum);
+      metadata.put("osmosis_replication_timestamp",new_timestamp);
+    }
+    CHECK(mdb_txn_commit(txn));
+    cout << "Committed: ";
+  } else {
+    mdb_txn_abort(txn);
+    cout << "Aborted: ";
   }
-
-  // Assemble a WKT LineString geometry.
-  cout << "\tLINESTRING (";
-  cout << std::fixed << std::setprecision(7); // the output should have 7 decimal places.
-  auto nodes = way.getNodes();
-  for (int i = 0; i < nodes.size(); i++) {
-    auto location = locations.get(nodes[i]);
-    if (i > 0) cout << ",";
-    cout << location.lon() << " " << location.lat();
-  }
-  cout << ")" << endl;
-
-  mdb_env_close(env); // close the database.
+  cout << old_seqnum << " -> " << new_seqnum << " in " << duration << " seconds." << endl;
+  mdb_env_sync(env,true);
+  mdb_env_close(env);
 }
