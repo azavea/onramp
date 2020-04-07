@@ -1,0 +1,3 @@
+[submodule "vendor/OSMExpress"]
+	path = vendor/OSMExpress
+	url = git@github.com:protomaps/OSMExpress.git
