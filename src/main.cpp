@@ -5,7 +5,7 @@
 #include "osmium/io/any_input.hpp"
 #include "osmx/storage.h"
 
-#include "./osmx_update_handler.cpp"
+#include "./onramp_update_handler.cpp"
 
 using namespace std;
 
@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
   const osmium::io::File input_file{osc};
 
   osmium::io::Reader reader{input_file, osmium::osm_entity_bits::object};
-  OsmxUpdateHandler handler(txn);
+  OnrampUpdateHandler handler(txn);
   osmium::apply(reader, handler);
 
   auto duration = (std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now() - startTime ).count()) / 1000.0;

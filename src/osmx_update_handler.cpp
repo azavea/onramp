@@ -9,7 +9,7 @@
 using namespace std;
 
 class OsmxUpdateHandler : public osmium::handler::Handler {
-  public:
+public:
   OsmxUpdateHandler(MDB_txn *txn) :
   mTxn(txn),
   mLocations(txn),
@@ -23,18 +23,17 @@ class OsmxUpdateHandler : public osmium::handler::Handler {
   mRelationRelation(txn, "relation_relation")  {
   }
 
-  // The oldNode is coming from osmx and will only contain an id and location
-  virtual void node_changed(const osmium::Node& newNode, const osmium::Location& oldLocation) {
-    cout << "NODE CHANGED: " << newNode.id() << " to v" << newNode.version() << endl;
-  }
+  /** START HOOKS
+   * Default hook implementation is for each to NOOP
+   */
 
-  virtual void node_added(const osmium::Node& newNode) {
-    cout << "NODE ADDED: " << to_string(newNode.id()) << endl;
-  }
+  virtual void node_changed(const osmium::Node& newNode, const osmium::Location& oldLocation) {}
 
-  virtual void node_deleted(const osmium::Node& oldNode) {
-    cout << "NODE DELETED: " << to_string(oldNode.id()) << endl;
-  }
+  virtual void node_added(const osmium::Node& newNode) {}
+
+  virtual void node_deleted(const osmium::Node& oldNode) {}
+
+  /** END HOOKS */
 
   // update location, node, cell_location tables
   void node(const osmium::Node& node) {
@@ -215,7 +214,7 @@ class OsmxUpdateHandler : public osmium::handler::Handler {
     }
   }
 
-  private:
+private:
   MDB_txn *mTxn;
   osmx::db::Locations mLocations;
   osmx::db::Elements mNodes;

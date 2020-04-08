@@ -9,7 +9,7 @@ LIBROARING=vendor/OSMExpress/vendor/CRoaring/src/libroaring.a
 LIBS2=vendor/OSMExpress/vendor/s2geometry/libs2.a
 
 OSMEXPRESS_SOURCE_FILES=./vendor/OSMExpress/src/storage.cpp
-SOURCE_FILES=./src/main.cpp ./src/osmx_update_handler.cpp $(OSMEXPRESS_SOURCE_FILES)
+SOURCE_FILES=./src/main.cpp ./src/osmx_update_handler.cpp ./src/onramp_update_handler.cpp $(OSMEXPRESS_SOURCE_FILES)
 
 $(LIBLMDB) $(LIBCAPNP) $(LIBKJ) $(LIBROARING) $(LIBS2):
 	cd vendor/OSMExpress && \
