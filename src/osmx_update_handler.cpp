@@ -23,6 +23,19 @@ class OsmxUpdateHandler : public osmium::handler::Handler {
   mRelationRelation(txn, "relation_relation")  {
   }
 
+  // The oldNode is coming from osmx and will only contain an id and location
+  virtual void node_changed(const osmium::Node& newNode, const osmium::Location& oldLocation) {
+    cout << "NODE CHANGED: " << newNode.id() << " to v" << newNode.version() << endl;
+  }
+
+  virtual void node_added(const osmium::Node& newNode) {
+    cout << "NODE ADDED: " << to_string(newNode.id()) << endl;
+  }
+
+  virtual void node_deleted(const osmium::Node& oldNode) {
+    cout << "NODE DELETED: " << to_string(oldNode.id()) << endl;
+  }
+
   // update location, node, cell_location tables
   void node(const osmium::Node& node) {
     uint64_t id = node.id();
@@ -31,12 +44,26 @@ class OsmxUpdateHandler : public osmium::handler::Handler {
     uint64_t prev_cell;
     if (prev_location.is_defined()) prev_cell = S2CellId(S2LatLng::FromDegrees(prev_location.lat(),prev_location.lon())).parent(CELL_INDEX_LEVEL).id();
 
+    // TODO: Discuss add/change/delete logic in context of rules at:
+    // https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs#Actions
+
     if (!node.visible()) {
+      // DELETED HOOK
+      node_deleted(node);
+
       mLocations.del(id);
       mNodes.del(id);
       mCellNode.del(prev_cell,id);
       return;
     } else {
+      // CHANGED HOOK
+      if (mLocations.exists(id)) {
+        node_changed(node, prev_location);
+      // ADDED HOOK
+      } else {
+        node_added(node);
+      }
+
       mLocations.put(id,new_location);
       if (node.tags().size() > 0) {
         ::capnp::MallocMessageBuilder message;
