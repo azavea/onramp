@@ -1,0 +1,228 @@
+#include <set>
+
+#include "osmium/handler.hpp"
+#include "osmium/visitor.hpp"
+#include "osmx/storage.h"
+#include "s2/s2latlng.h"
+#include "s2/s2cell_union.h"
+
+using namespace std;
+
+class OsmxUpdateHandler : public osmium::handler::Handler {
+public:
+  OsmxUpdateHandler(MDB_txn *txn) :
+  mTxn(txn),
+  mLocations(txn),
+  mNodes(txn,"nodes"),
+  mWays(txn,"ways"),
+  mRelations(txn,"relations"),
+  mCellNode(txn,"cell_node"),
+  mNodeWay(txn,"node_way"),
+  mNodeRelation(txn,"node_relation"),
+  mWayRelation(txn,"way_relation"),
+  mRelationRelation(txn, "relation_relation")  {
+  }
+
+  /** START HOOKS
+   * Default hook implementation is for each to NOOP
+   */
+
+  virtual void node_changed(const osmium::Node& newNode, const osmium::Location& oldLocation) {}
+
+  virtual void node_added(const osmium::Node& newNode) {}
+
+  virtual void node_deleted(const osmium::Node& oldNode) {}
+
+  /** END HOOKS */
+
+  // update location, node, cell_location tables
+  void node(const osmium::Node& node) {
+    uint64_t id = node.id();
+    osmium::Location prev_location = mLocations.get(id);
+    osmium::Location new_location = node.location();
+    uint64_t prev_cell;
+    if (prev_location.is_defined()) prev_cell = S2CellId(S2LatLng::FromDegrees(prev_location.lat(),prev_location.lon())).parent(CELL_INDEX_LEVEL).id();
+
+    // TODO: Discuss add/change/delete logic in context of rules at:
+    // https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs#Actions
+
+    if (!node.visible()) {
+      // DELETED HOOK
+      node_deleted(node);
+
+      mLocations.del(id);
+      mNodes.del(id);
+      mCellNode.del(prev_cell,id);
+      return;
+    } else {
+      // CHANGED HOOK
+      if (mLocations.exists(id)) {
+        node_changed(node, prev_location);
+      // ADDED HOOK
+      } else {
+        node_added(node);
+      }
+
+      mLocations.put(id,new_location);
+      if (node.tags().size() > 0) {
+        ::capnp::MallocMessageBuilder message;
+        Node::Builder nodeMsg = message.initRoot<Node>();
+        setTags<Node::Builder>(node.tags(),nodeMsg);
+        kj::VectorOutputStream output;
+        capnp::writeMessage(output,message);
+        mNodes.put(id,output);
+      } else {
+        mNodes.del(id);
+      }
+    }
+
+    uint64_t new_cell = S2CellId(S2LatLng::FromDegrees(new_location.lat(),new_location.lon())).parent(CELL_INDEX_LEVEL).id();
+    if (!prev_location.is_defined()) {
+      mCellNode.put(new_cell,id);
+      return;
+    }
+
+    if (prev_cell != new_cell) {
+      mCellNode.del(prev_cell,id);
+      mCellNode.put(new_cell,id);
+    }
+  }
+
+  // update way, node_way tables
+  void way(const osmium::Way &way) {
+    uint64_t id = way.id();
+
+    set<uint64_t> prev_nodes;
+    set<uint64_t> new_nodes;
+
+    if (mWays.exists(id)) {
+      auto reader = mWays.getReader(id);
+      Way::Reader way = reader.getRoot<Way>();
+      for (auto const &node_id : way.getNodes()) {
+        prev_nodes.insert(node_id);
+      }
+    }
+
+    if (!way.visible()) {
+      mWays.del(id);
+    } else {
+      auto const &nodes = way.nodes();
+      ::capnp::MallocMessageBuilder message;
+      Way::Builder wayMsg = message.initRoot<Way>();
+      wayMsg.initNodes(nodes.size());
+      int i = 0;
+      for (int i = 0; i < nodes.size(); i++) {
+        wayMsg.getNodes().set(i,nodes[i].ref());
+        new_nodes.insert(nodes[i].ref());
+      }
+      setTags<Way::Builder>(way.tags(),wayMsg);
+      kj::VectorOutputStream output;
+      capnp::writeMessage(output,message);
+      mWays.put(id,output);
+    }
+
+    if (!way.visible()) {
+      for (uint64_t node_id : prev_nodes) mNodeWay.del(node_id,id);
+    } else {
+      for (uint64_t node_id : prev_nodes) {
+        if (new_nodes.count(node_id) == 0) mNodeWay.del(node_id,id);
+      }
+      for (uint64_t node_id : new_nodes) {
+        if (prev_nodes.count(node_id) == 0) mNodeWay.put(node_id,id);
+      }
+    }
+  }
+
+  // update relation, node_relation, way_relation and relation_relation tables
+  void relation(const osmium::Relation &relation) {
+    uint64_t id = relation.id();
+
+    set<uint64_t> prev_nodes;
+    set<uint64_t> prev_ways;
+    set<uint64_t> prev_relations;
+    set<uint64_t> new_nodes;
+    set<uint64_t> new_ways;
+    set<uint64_t> new_relations;
+
+    if (mRelations.exists(id)) {
+      auto reader = mRelations.getReader(id);
+      Relation::Reader relation = reader.getRoot<Relation>();
+      for (auto const &member : relation.getMembers()) {
+        if (member.getType() == RelationMember::Type::NODE) {
+          prev_nodes.insert(member.getRef());
+        } else if (member.getType() == RelationMember::Type::WAY) {
+          prev_ways.insert(member.getRef());
+        } else {
+          prev_relations.insert(member.getRef());
+        }
+      }
+    }
+
+    if (!relation.visible()) {
+      mRelations.del(relation.id());
+    } else {
+      ::capnp::MallocMessageBuilder message;
+      Relation::Builder relationMsg = message.initRoot<Relation>();
+      setTags<Relation::Builder>(relation.tags(),relationMsg);
+      auto members = relationMsg.initMembers(relation.members().size());
+      int i = 0;
+      for (auto const &member : relation.members()) {
+        members[i].setRef(member.ref());
+        members[i].setRole(member.role());
+        if (member.type() == osmium::item_type::node) {
+          new_nodes.insert(member.ref());
+          members[i].setType(RelationMember::Type::NODE);
+        }
+        else if (member.type() == osmium::item_type::way) {
+          new_ways.insert(member.ref());
+          members[i].setType(RelationMember::Type::WAY);
+        }
+        else if (member.type() == osmium::item_type::relation) {
+          new_relations.insert(member.ref());
+          members[i].setType(RelationMember::Type::RELATION);
+        }
+        i++;
+      }
+      kj::VectorOutputStream output;
+      capnp::writeMessage(output,message);
+      mRelations.put(relation.id(),output);
+    }
+
+    if (!relation.visible()) {
+      for (uint64_t node_id : prev_nodes) mNodeRelation.del(node_id,id);
+      for (uint64_t way_id : prev_ways) mWayRelation.del(way_id,id);
+      for (uint64_t relation_id : prev_relations) mRelationRelation.del(relation_id,id);
+    } else {
+      for (uint64_t node_id : prev_nodes) {
+        if (new_nodes.count(node_id) == 0) mNodeRelation.del(node_id,id);
+      }
+      for (uint64_t node_id : new_nodes) {
+        if (prev_nodes.count(node_id) == 0) mNodeRelation.put(node_id,id);
+      }
+      for (uint64_t way_id : prev_ways) {
+        if (new_ways.count(way_id) == 0) mWayRelation.del(way_id,id);
+      }
+      for (uint64_t way_id : new_ways) {
+        if (prev_ways.count(way_id) == 0) mWayRelation.put(way_id,id);
+      }
+      for (uint64_t relation_id : prev_relations) {
+        if (new_relations.count(relation_id) == 0) mRelationRelation.del(relation_id,id);
+      }
+      for (uint64_t relation_id : new_relations) {
+        if (prev_relations.count(relation_id) == 0) mRelationRelation.put(relation_id,id);
+      }
+    }
+  }
+
+private:
+  MDB_txn *mTxn;
+  osmx::db::Locations mLocations;
+  osmx::db::Elements mNodes;
+  osmx::db::Elements mWays;
+  osmx::db::Elements mRelations;
+  osmx::db::Index mNodeWay;
+  osmx::db::Index mNodeRelation;
+  osmx::db::Index mWayRelation;
+  osmx::db::Index mRelationRelation;
+  osmx::db::Index mCellNode;
+};
