@@ -23,18 +23,6 @@ public:
   mRelationRelation(txn, "relation_relation")  {
   }
 
-  /** START HOOKS
-   * Default hook implementation is for each to NOOP
-   */
-
-  virtual void node_changed(const osmium::Node& newNode, const osmium::Location& oldLocation) {}
-
-  virtual void node_added(const osmium::Node& newNode) {}
-
-  virtual void node_deleted(const osmium::Node& oldNode) {}
-
-  /** END HOOKS */
-
   // update location, node, cell_location tables
   void node(const osmium::Node& node) {
     uint64_t id = node.id();
@@ -47,22 +35,11 @@ public:
     // https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs#Actions
 
     if (!node.visible()) {
-      // DELETED HOOK
-      node_deleted(node);
-
       mLocations.del(id);
       mNodes.del(id);
       mCellNode.del(prev_cell,id);
       return;
     } else {
-      // CHANGED HOOK
-      if (mLocations.exists(id)) {
-        node_changed(node, prev_location);
-      // ADDED HOOK
-      } else {
-        node_added(node);
-      }
-
       mLocations.put(id,new_location);
       if (node.tags().size() > 0) {
         ::capnp::MallocMessageBuilder message;

@@ -9,7 +9,8 @@ LIBROARING=vendor/OSMExpress/vendor/CRoaring/src/libroaring.a
 LIBS2=vendor/OSMExpress/vendor/s2geometry/libs2.a
 
 OSMEXPRESS_SOURCE_FILES=./vendor/OSMExpress/src/storage.cpp
-SOURCE_FILES=./src/main.cpp ./src/osmx_update_handler.cpp ./src/onramp_update_handler.cpp $(OSMEXPRESS_SOURCE_FILES)
+TINYXML2_SOURCE_FILES=./vendor/TinyXML2/tinyxml2.cpp
+SOURCE_FILES=./src/main.cpp ./src/osmx_update_handler.cpp ./src/onramp_update_handler.cpp ./src/onramp_relations_manager.cpp $(OSMEXPRESS_SOURCE_FILES) $(TINYXML2_SOURCE_FILES)
 
 $(LIBLMDB) $(LIBCAPNP) $(LIBKJ) $(LIBROARING) $(LIBS2):
 	cd vendor/OSMExpress && \
@@ -18,6 +19,7 @@ $(LIBLMDB) $(LIBCAPNP) $(LIBKJ) $(LIBROARING) $(LIBS2):
 
 onramp : $(SOURCE_FILES) $(LIBLMDB) $(LIBCAPNP) $(LIBKJ) $(LIBROARING) $(LIBS2)
 	g++ $(DEBUG) -std=c++14 -static \
+	  -I vendor/TinyXML2 \
 	  -I vendor/OSMExpress/include \
 		-I vendor/OSMExpress/vendor/lmdb/libraries/liblmdb \
 		-I vendor/OSMExpress/vendor/libosmium/include \
