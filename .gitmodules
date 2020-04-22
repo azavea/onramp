@@ -1,3 +1,6 @@
 [submodule "vendor/OSMExpress"]
 	path = vendor/OSMExpress
 	url = git@github.com:protomaps/OSMExpress.git
+[submodule "vendor/TinyXML2"]
+	path = vendor/TinyXML2
+	url = git@github.com:leethomason/tinyxml2.git
