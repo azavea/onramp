@@ -13,6 +13,13 @@
           mode: '0775'
           owner: vagrant
           group: vagrant
+      
+      - name: Install onramp build dependencies
+        apt:
+          state: present
+          pkg:
+          - g++
+          - libboost-dev
 
     roles:
       - { role: "onramp.osmexpress" }
