@@ -1,15 +1,21 @@
+#include <iostream>
+#include <cassert>
 #include <set>
-
+#include "cxxopts.hpp"
+#include "roaring.hh"
 #include "osmium/handler.hpp"
+#include "osmium/io/any_input.hpp"
 #include "osmium/visitor.hpp"
-#include "osmx/storage.h"
+#include "osmium/util/progress_bar.hpp"
 #include "s2/s2latlng.h"
 #include "s2/s2cell_union.h"
+#include "osmx/storage.h"
 
 using namespace std;
+using namespace osmx;
 
 class OsmxUpdateHandler : public osmium::handler::Handler {
-public:
+  public:
   OsmxUpdateHandler(MDB_txn *txn) :
   mTxn(txn),
   mLocations(txn),
@@ -26,13 +32,10 @@ public:
   // update location, node, cell_location tables
   void node(const osmium::Node& node) {
     uint64_t id = node.id();
-    osmium::Location prev_location = mLocations.get(id);
-    osmium::Location new_location = node.location();
+    db::Location prev_location = mLocations.get(id);
+    db::Location new_location = db::Location{node.location(),(int32_t)node.version()};
     uint64_t prev_cell;
-    if (prev_location.is_defined()) prev_cell = S2CellId(S2LatLng::FromDegrees(prev_location.lat(),prev_location.lon())).parent(CELL_INDEX_LEVEL).id();
-
-    // TODO: Discuss add/change/delete logic in context of rules at:
-    // https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs#Actions
+    if (prev_location.is_defined()) prev_cell = S2CellId(S2LatLng::FromDegrees(prev_location.coords.lat(),prev_location.coords.lon())).parent(CELL_INDEX_LEVEL).id();
 
     if (!node.visible()) {
       mLocations.del(id);
@@ -45,6 +48,12 @@ public:
         ::capnp::MallocMessageBuilder message;
         Node::Builder nodeMsg = message.initRoot<Node>();
         setTags<Node::Builder>(node.tags(),nodeMsg);
+        auto metadata = nodeMsg.initMetadata();
+        metadata.setVersion(node.version());
+        metadata.setTimestamp(node.timestamp());
+        metadata.setChangeset(node.changeset());
+        metadata.setUid(node.uid());
+        metadata.setUser(node.user());
         kj::VectorOutputStream output;
         capnp::writeMessage(output,message);
         mNodes.put(id,output);
@@ -53,7 +62,7 @@ public:
       }
     }
 
-    uint64_t new_cell = S2CellId(S2LatLng::FromDegrees(new_location.lat(),new_location.lon())).parent(CELL_INDEX_LEVEL).id();
+    uint64_t new_cell = S2CellId(S2LatLng::FromDegrees(new_location.coords.lat(),new_location.coords.lon())).parent(CELL_INDEX_LEVEL).id();
     if (!prev_location.is_defined()) {
       mCellNode.put(new_cell,id);
       return;
@@ -93,6 +102,12 @@ public:
         new_nodes.insert(nodes[i].ref());
       }
       setTags<Way::Builder>(way.tags(),wayMsg);
+      auto metadata = wayMsg.initMetadata();
+      metadata.setVersion(way.version());
+      metadata.setTimestamp(way.timestamp());
+      metadata.setChangeset(way.changeset());
+      metadata.setUid(way.uid());
+      metadata.setUser(way.user());
       kj::VectorOutputStream output;
       capnp::writeMessage(output,message);
       mWays.put(id,output);
@@ -160,6 +175,12 @@ public:
         }
         i++;
       }
+      auto metadata = relationMsg.initMetadata();
+      metadata.setVersion(relation.version());
+      metadata.setTimestamp(relation.timestamp());
+      metadata.setChangeset(relation.changeset());
+      metadata.setUid(relation.uid());
+      metadata.setUser(relation.user());
       kj::VectorOutputStream output;
       capnp::writeMessage(output,message);
       mRelations.put(relation.id(),output);
@@ -191,15 +212,15 @@ public:
     }
   }
 
-private:
+  private:
   MDB_txn *mTxn;
-  osmx::db::Locations mLocations;
-  osmx::db::Elements mNodes;
-  osmx::db::Elements mWays;
-  osmx::db::Elements mRelations;
-  osmx::db::Index mNodeWay;
-  osmx::db::Index mNodeRelation;
-  osmx::db::Index mWayRelation;
-  osmx::db::Index mRelationRelation;
-  osmx::db::Index mCellNode;
+  db::Locations mLocations;
+  db::Elements mNodes;
+  db::Elements mWays;
+  db::Elements mRelations;
+  db::Index mNodeWay;
+  db::Index mNodeRelation;
+  db::Index mWayRelation;
+  db::Index mRelationRelation;
+  db::Index mCellNode;
 };
