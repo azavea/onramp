@@ -9,7 +9,6 @@
 
 #include "./onramp_relations_manager.cpp"
 #include "./onramp_update_handler.cpp"
-#include "./osmx_update_handler.cpp"
 
 using namespace std;
 
@@ -20,7 +19,6 @@ int main(int argc, char* argv[]) {
   cxxopts::Options cmdoptions("OnRamp", "Generate augmented diff from osc change file.");
   cmdoptions.add_options()
     ("v,verbose", "Verbose output")
-    ("commit", "Commit the update")
     ("osmx", ".osmx to update", cxxopts::value<string>())
     ("osc", ".osc to apply", cxxopts::value<string>())
     ("seqnum", "The sequence number of the .osc", cxxopts::value<string>())
@@ -35,10 +33,9 @@ int main(int argc, char* argv[]) {
     cout << "Usage: onramp OSMX_FILE OSC_FILE SEQNUM TIMESTAMP [OPTIONS]" << endl;
     cout << "Generates aug diffs from osm change file before applying changes to osmx database." << endl << endl;
     cout << "EXAMPLE:" << endl;
-    cout << " onramp planet.osmx 123456.osc 123456 2019-09-05T00:00:00Z --commit" << endl << endl;
+    cout << " onramp planet.osmx 123456.osc 123456 2019-09-05T00:00:00Z" << endl << endl;
     cout << "OPTIONS:" << endl;
     cout << " --v,--verbose: verbose output." << endl;
-    cout << " --commit: Actually commit the transaction; otherwise runs the update and rolls back." << endl;
     exit(1);
   }
 
@@ -50,6 +47,12 @@ int main(int argc, char* argv[]) {
   MDB_txn* txn;
   MDB_env* roEnv = osmx::db::createEnv(osmx,false);
   CHECK(mdb_txn_begin(roEnv, NULL, MDB_RDONLY, &txn));
+
+  // osmx::db::Locations mLocations(txn);
+  // uint64_t testId = 6892919079;
+  // osmx::db::Location oldLoc = mLocations.get(testId);
+  // cout << "Node " << testId << ": (" << oldLoc.coords.lon() << ", " << oldLoc.coords.lat() << ")" << endl;
+  // exit;
 
   string old_seqnum = "UNKNOWN";
   auto new_seqnum = result["seqnum"].as<string>();
@@ -78,39 +81,17 @@ int main(int argc, char* argv[]) {
   }));
   reader.close();
 
+  // Third: Create complete relation objects from incomplete relation state in osc file
   relationsManager.for_each_incomplete_relation([&](const osmium::relations::RelationHandle& handle) {
     const osmium::Relation& relation = *handle;
     handler.relation(relation);
   });
 
-  mdb_txn_renew(txn);
-
   string adiff_filename = "./" + new_seqnum + ".adiff.xml";
   handler.to_aug_diff_xml(adiff_filename, new_timestamp);
 
-  // Third: Apply changes in osc file to osmx database
-  MDB_env* env = osmx::db::createEnv(osmx,true);
-  CHECK(mdb_txn_begin(env, NULL, 0, &txn));
-  osmium::io::Reader osmxReader{input_file, osmium::osm_entity_bits::object};
-  OsmxUpdateHandler osmxHandler(txn);
-  osmium::apply(osmxReader, osmxHandler);
-  osmxReader.close();
-
   auto duration = (std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now() - startTime ).count()) / 1000.0;
+  cout << "Augmented diff " << new_seqnum << " generated in " << duration << " seconds." << endl;
 
-  if (result.count("commit") > 0) {
-    {
-      metadata.put("osmosis_replication_sequence_number",new_seqnum);
-      metadata.put("osmosis_replication_timestamp",new_timestamp);
-    }
-    CHECK(mdb_txn_commit(txn));
-    cout << "Committed: ";
-  } else {
-    mdb_txn_abort(txn);
-    cout << "Aborted: ";
-  }
-  cout << old_seqnum << " -> " << new_seqnum << " in " << duration << " seconds." << endl;
-
-  mdb_env_sync(env,true);
-  mdb_env_close(env);
+  mdb_env_close(roEnv);
 }

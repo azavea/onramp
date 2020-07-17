@@ -290,11 +290,13 @@ private:
    */
   BufferOffset create_old_node(osmium::memory::Buffer& buffer,
                                const osmium::object_id_type nodeId) {
-    osmium::Location oldLocation = mLocations.get(nodeId);
+    osmx::db::Location oldLocation = mLocations.get(nodeId);
+    // cout << "Node: (" << nodeId << ": " << oldLocation.coords.lon() << ", " << oldLocation.coords.lat() << ")" << endl;
+    // exit;
     return osmium::builder::add_node(
       nodes_buffer,
       _id(nodeId),
-      _location(oldLocation.lon(), oldLocation.lat())
+      _location(oldLocation.coords.lon(), oldLocation.coords.lat())
     );
   }
 
@@ -330,8 +332,8 @@ private:
             wnl_builder.add_node_ref(nodeRef);
           // Otherwise fall back to the old node location from osmx
           } else {
-            osmium::Location oldLoc = mLocations.get(node_id);
-            wnl_builder.add_node_ref(osmium::NodeRef(node_id, oldLoc));
+            osmx::db::Location oldLoc = mLocations.get(node_id);
+            wnl_builder.add_node_ref(osmium::NodeRef(node_id, oldLoc.coords));
           }
         }
       }
@@ -360,8 +362,8 @@ private:
       {
         osmium::builder::WayNodeListBuilder wnl_builder{buffer, &builder};
         for (uint64_t node_id : prev_nodes) {
-          osmium::Location loc = mLocations.get(node_id);
-          wnl_builder.add_node_ref(osmium::NodeRef(node_id, loc));
+          osmx::db::Location loc = mLocations.get(node_id);
+          wnl_builder.add_node_ref(osmium::NodeRef(node_id, loc.coords));
         }
       }
     }
