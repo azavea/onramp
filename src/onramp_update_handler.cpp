@@ -291,6 +291,8 @@ private:
   BufferOffset create_old_node(osmium::memory::Buffer& buffer,
                                const osmium::object_id_type nodeId) {
     osmx::db::Location oldLocation = mLocations.get(nodeId);
+    // cout << "Node: (" << nodeId << ": " << oldLocation.coords.lon() << ", " << oldLocation.coords.lat() << ")" << endl;
+    // exit;
     return osmium::builder::add_node(
       nodes_buffer,
       _id(nodeId),
