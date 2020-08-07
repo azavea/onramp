@@ -1,3 +1,11 @@
+"""
+
+From OSMExpress https://github.com/protomaps/osmexpress Copyright 2019 Protomaps.
+Some source code from https://github.com/osmcode/pyosmium Copyright (c) 2014-2018, Sarah Hoffmann.
+All rights reserved. Licensed under 2-Clause BSD, see LICENSE
+
+"""
+
 """ Helper functions to communicate with replication servers.
 derived from https://github.com/osmcode/pyosmium
 """

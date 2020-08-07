@@ -77,3 +77,8 @@ docker-compose run --rm --entrypoint="python3 ./augmented_diff.py" onramp \
   /data/pa-2691.osc \
   /data/pa-2691.adiff.xml
 ```
+
+## License
+
+Copyright Azavea
+Apache2, see [LICENSE](./LICENSE)

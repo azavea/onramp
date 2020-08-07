@@ -1,3 +1,10 @@
+"""
+
+From OSMExpress https://github.com/protomaps/osmexpress Copyright 2019 Protomaps.
+All rights reserved. Licensed under 2-Clause BSD, see LICENSE
+
+"""
+
 from collections import namedtuple
 from datetime import datetime
 import copy
