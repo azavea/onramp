@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  osmx:
+    build:
+      context: ./osmx
+    image: osmx
+    volumes:
+      - "./data:/data"
+  onramp:
+    build:
+      context: ./app
+    environment:
+      - OSMX_DB=/data/pennsylvania.osmx
+    image: onramp-app
+    volumes:
+      - "./app:/app"
+      - "./data:/data"
