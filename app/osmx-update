@@ -17,53 +17,67 @@ import fcntl
 from server import ReplicationServer
 
 # expects osmx to be on the PATH.
-osmx = 'osmx'
+osmx = "osmx"
 
 try:
-  file = open('/tmp/osmx.lock','w')
-  fcntl.lockf(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    file = open("/tmp/osmx.lock", "w")
+    fcntl.lockf(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-  s = ReplicationServer(sys.argv[2])
+    s = ReplicationServer(sys.argv[2])
 
-  # OSMX always uses minutely timestamps internally - try integrating daily
-  seqnum = subprocess.check_output([osmx,'query',sys.argv[1],'seqnum'])
+    # OSMX always uses minutely timestamps internally - try integrating daily
+    seqnum = subprocess.check_output([osmx, "query", sys.argv[1], "seqnum"])
 
-  if not seqnum.strip():
-    timestamp = subprocess.check_output([osmx,'query',sys.argv[1],'timestamp'])
-    timestamp = timestamp.decode('utf-8').strip()
-    timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
-    timestamp = timestamp.replace(tzinfo=timezone.utc)
-    print('Timestamp is {0}'.format(timestamp))
-    seqnum = s.timestamp_to_sequence(timestamp)
+    if not seqnum.strip():
+        timestamp = subprocess.check_output([osmx, "query", sys.argv[1], "timestamp"])
+        timestamp = timestamp.decode("utf-8").strip()
+        timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+        print("Timestamp is {0}".format(timestamp))
+        seqnum = s.timestamp_to_sequence(timestamp)
 
-  seqnum = int(seqnum)
+    seqnum = int(seqnum)
 
-  print('Sequence number is {0}'.format(seqnum))
+    print("Sequence number is {0}".format(seqnum))
 
-  latest = s.get_state_info().sequence
-  print("Latest is {0}".format(latest))
+    latest = s.get_state_info().sequence
+    print("Latest is {0}".format(latest))
 
-  current_id = seqnum + 1
-  while current_id <= latest:
-    fd, path = tempfile.mkstemp(suffix='.osc.gz')
-    fd_unzipped, path_unzipped = tempfile.mkstemp(suffix='.osc')
-    with open(fd,'wb') as f:
-      f.write(s.get_diff_block(current_id))
-    info = s.get_state_info(current_id)
-    timestamp = info.timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
+    current_id = seqnum + 1
+    while current_id <= latest:
+        fd, path = tempfile.mkstemp(suffix=".osc.gz")
+        fd_unzipped, path_unzipped = tempfile.mkstemp(suffix=".osc")
+        with open(fd, "wb") as f:
+            f.write(s.get_diff_block(current_id))
+        info = s.get_state_info(current_id)
+        timestamp = info.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Generate Augmented Diff
-    adiff_start = time.time()
-    subprocess.call(['gunzip', '-kc', path], stdout=fd_unzipped)
-    subprocess.check_call(['python3', './augmented_diff.py', sys.argv[1], path_unzipped, '/tmp/{}.adiff.xml'.format(current_id)])
-    print('Augmented diff generated for {} in {}s'.format(current_id, time.time() - adiff_start))
+        # Generate Augmented Diff
+        adiff_start = time.time()
+        subprocess.call(["gunzip", "-kc", path], stdout=fd_unzipped)
+        subprocess.check_call(
+            [
+                "python3",
+                "./augmented_diff.py",
+                sys.argv[1],
+                path_unzipped,
+                "/tmp/{}.adiff.xml".format(current_id),
+            ]
+        )
+        print(
+            "Augmented diff generated for {} in {}s".format(
+                current_id, time.time() - adiff_start
+            )
+        )
 
-    subprocess.check_call([osmx,'update',sys.argv[1],path,str(current_id),timestamp, "--commit"])
-    os.unlink(path)
-    current_id = current_id + 1
+        subprocess.check_call(
+            [osmx, "update", sys.argv[1], path, str(current_id), timestamp, "--commit"]
+        )
+        os.unlink(path)
+        current_id = current_id + 1
 
 except BlockingIOError:
-  print("Process is running - exiting.")
+    print("Process is running - exiting.")
 finally:
-  fcntl.lockf(file, fcntl.LOCK_UN)
-  file.close()
+    fcntl.lockf(file, fcntl.LOCK_UN)
+    file.close()
