@@ -5,32 +5,31 @@ Some source code from https://github.com/osmcode/pyosmium Copyright (c) 2014-201
 All rights reserved. Licensed under 2-Clause BSD, see LICENSE
 
 """
-
-""" Helper functions to communicate with replication servers.
-derived from https://github.com/osmcode/pyosmium
-"""
-
+from collections import namedtuple
+import datetime as dt
+import logging
+from math import ceil
 import sys
 import urllib.request as urlrequest
-import urllib.error as urlerror
-import datetime as dt
-from collections import namedtuple
-from math import ceil
 
-OsmosisState = namedtuple('OsmosisState', ['sequence', 'timestamp'])
-DownloadResult = namedtuple('DownloadResult', ['id', 'newest'])
+OsmosisState = namedtuple("OsmosisState", ["sequence", "timestamp"])
+DownloadResult = namedtuple("DownloadResult", ["id", "newest"])
 
-import logging
 
 log = logging.getLogger()
 
+
 class ReplicationServer(object):
-    def __init__(self, url, diff_type='osc.gz'):
+    """ Helper functions to communicate with replication servers.
+    derived from https://github.com/osmcode/pyosmium
+    """
+
+    def __init__(self, url, diff_type="osc.gz"):
         self.baseurl = url
         self.diff_type = diff_type
 
     def open_url(self, url):
-        return urlrequest.urlopen(url,None,10)
+        return urlrequest.urlopen(url, None, 10)
 
     def timestamp_to_sequence(self, timestamp, balanced_search=False):
         """ Get the sequence number of the replication file that contains the
@@ -113,7 +112,6 @@ class ReplicationServer(object):
             if lower.sequence + 1 >= upper.sequence:
                 return lower.sequence
 
-
     def get_state_info(self, seq=None):
         """ Downloads and returns the state information for the given
             sequence. If the download is successful, a namedtuple with
@@ -130,20 +128,20 @@ class ReplicationServer(object):
         seq = None
         line = response.readline()
         while line:
-            line = line.decode('utf-8')
-            if '#' in line:
-                line = line[0:line.index('#')]
+            line = line.decode("utf-8")
+            if "#" in line:
+                line = line[0 : line.index("#")]  # noqa: E203
             else:
                 line = line.strip()
             if line:
-                kv = line.split('=', 2)
+                kv = line.split("=", 2)
                 if len(kv) != 2:
                     return None
-                if kv[0] == 'sequenceNumber':
+                if kv[0] == "sequenceNumber":
                     seq = int(kv[1])
-                elif kv[0] == 'timestamp':
+                elif kv[0] == "timestamp":
                     ts = dt.datetime.strptime(kv[1], "%Y-%m-%dT%H\\:%M\\:%SZ")
-                    if sys.version_info >= (3,0):
+                    if sys.version_info >= (3, 0):
                         ts = ts.replace(tzinfo=dt.timezone.utc)
             line = response.readline()
 
@@ -157,7 +155,6 @@ class ReplicationServer(object):
         """
         return self.open_url(self.get_diff_url(seq)).read()
 
-
     def get_state_url(self, seq):
         """ Returns the URL of the state.txt files for a given sequence id.
 
@@ -166,15 +163,22 @@ class ReplicationServer(object):
             service.
         """
         if seq is None:
-            return self.baseurl + '/state.txt'
+            return self.baseurl + "/state.txt"
 
-        return '%s/%03i/%03i/%03i.state.txt' % (self.baseurl,
-                     seq / 1000000, (seq % 1000000) / 1000, seq % 1000)
-
+        return "%s/%03i/%03i/%03i.state.txt" % (
+            self.baseurl,
+            seq / 1000000,
+            (seq % 1000000) / 1000,
+            seq % 1000,
+        )
 
     def get_diff_url(self, seq):
         """ Returns the URL to the diff file for the given sequence id.
         """
-        return '%s/%03i/%03i/%03i.%s' % (self.baseurl,
-                     seq / 1000000, (seq % 1000000) / 1000, seq % 1000,
-                     self.diff_type)
+        return "%s/%03i/%03i/%03i.%s" % (
+            self.baseurl,
+            seq / 1000000,
+            (seq % 1000000) / 1000,
+            seq % 1000,
+            self.diff_type,
+        )
