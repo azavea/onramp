@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from textwrap import wrap
 import time
 
 from server import ReplicationServer
@@ -29,14 +30,10 @@ def generate_augmented_diff(current_id, osmx_db, osc_gz_file, output_path):
     adiff_start = time.time()
     fd_unzipped, path_unzipped = tempfile.mkstemp(suffix=".osc")
     subprocess.call(["gunzip", "-kc", osc_gz_file], stdout=fd_unzipped)
+    [pt1, pt2, pt3] = wrap(str(current_id).zfill(9), 3)
+    output_file = os.path.join(output_path, pt1, pt2, "{}.adiff.xml".format(pt3))
     subprocess.check_call(
-        [
-            "python3",
-            "./augmented_diff.py",
-            osmx_db,
-            path_unzipped,
-            os.path.join(output_path, "{}.adiff.xml".format(current_id)),
-        ]
+        ["python3", "./augmented_diff.py", osmx_db, path_unzipped, output_file]
     )
     logger.info(
         "Augmented diff generated for {} in {}s".format(
