@@ -15,6 +15,7 @@ import osmx
 # generates an augmented diff for an OSC (OsmChange) file.
 # see https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs
 # this is intended to be run before the OSC file is applied to the osmx file.
+# OUTPUT can be either a local file path or an AWS S3 uri
 
 if len(sys.argv) < 4:
     print("Usage: augmented_diff.py OSMX_FILE OSC_FILE OUTPUT")
@@ -383,4 +384,21 @@ def indent(elem, level=0):
 
 
 indent(o)
-ET.ElementTree(o).write(sys.argv[3])
+
+if sys.argv[3].startswith("s3://"):
+    import boto3
+    from tempfile import TemporaryFile
+    from urllib.parse import urlparse
+
+    url = urlparse(sys.argv[3])
+    s3 = boto3.resource("s3")
+    bucket = s3.Bucket(url.netloc)
+    with TemporaryFile(mode="w+b") as f:
+        ET.ElementTree(o).write(f)
+        f.seek(0)
+        key_path = url.path.lstrip("/")
+        bucket.upload_fileobj(f, key_path)
+        print("Augmented Diff written to: Bucket {}, Path: {}".format(url.netloc, key_path))
+else:
+    ET.ElementTree(o).write(sys.argv[3])
+    print("Augmented Diff written to: {}".format(sys.argv[3]))

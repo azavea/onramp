@@ -10,8 +10,10 @@ services:
     build:
       context: ./app
     environment:
+      - AWS_PROFILE
       - OSMX_DB=/data/pennsylvania.osmx
     image: onramp-app
     volumes:
       - "./app:/app"
       - "./data:/data"
+      - $HOME/.aws:/root/.aws:ro
