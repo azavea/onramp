@@ -1,0 +1,27 @@
+#cloud-config
+mounts:
+- [ /dev/nvme0n1p1, /mnt/data/ ]
+
+packages:
+# These dependencies are nessecary to build Onramp Python dependencies
+- build-essential
+- python3-dev
+# For isolating Onramp build dependencies
+- python3-venv
+
+runcmd:
+# Install OSMExpress
+- curl -L https://github.com/protomaps/OSMExpress/releases/download/0.2.0/osmexpress-0.2.0-Linux.tgz | tar -xzC /usr/local/bin/ osmx
+# Clone Onramp
+- git clone https://github.com/azavea/onramp.git /opt/onramp 
+- sudo chown -R ubuntu:ubuntu /opt/onramp/
+- cd /opt/onramp/app
+# Install Python dependencies
+- python3 -m venv ./venv
+- sudo chown -R ubuntu:ubuntu ./venv
+- ./venv/bin/pip install wheel
+- ./venv/bin/pip install -r requirements.txt
+# Initial invocation of osmx-update
+- su - ubuntu -c "/opt/onramp/app/venv/bin/python /opt/onramp/app/osmx-update /mnt/data/planet.osmx https://planet.openstreetmap.org/replication/minute/ 2>&1 | /usr/bin/logger -t osmx-update"
+# Write crontab entry to invoke osmx-update every minute
+- echo "* * * * * ubuntu /opt/onramp/app/venv/bin/python /opt/onramp/app/osmx-update /mnt/data/planet.osmx https://planet.openstreetmap.org/replication/minute/ 2>&1 | /usr/bin/logger -t osmx-update" >>/etc/crontab
