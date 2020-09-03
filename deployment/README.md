@@ -10,10 +10,20 @@ file is required.
 
 ## Workflow
 
-The following AWS CLI command will instantiate the EC2 instance. You will have
-to substitute your own key name, security group, subnet ID, and snapshot ID.
+The following AWS CLI command will instantiate the EC2 instance. 
+
+If desired, you can update the substituions supplied to `sed` to change the SHA
+of this repository that is checked out, and supply additional parameters to the
+`osmx-update` command.
+
+You will have to substitute your own key name, security group, subnet ID, and
+snapshot ID.
 
 ```bash
+sed -e "s/%%GIT_COMMIT%%/master/" \
+    -e "s/%%OSMX_UPDATE_OPTS%%//" \
+    "cloud-config.yml.template" > cloud-config.yml
+
 aws ec2 run-instances \
     --image-id ami-0bcc094591f354be2 \
     --count 1 \

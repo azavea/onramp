@@ -16,12 +16,12 @@ runcmd:
 - git clone https://github.com/azavea/onramp.git /opt/onramp 
 - sudo chown -R ubuntu:ubuntu /opt/onramp/
 - cd /opt/onramp/app
+- git checkout %%GIT_COMMIT%%
 # Install Python dependencies
-- python3 -m venv ./venv
-- sudo chown -R ubuntu:ubuntu ./venv
+- su - ubuntu -c "python3 -m venv ./venv"
 - ./venv/bin/pip install wheel
 - ./venv/bin/pip install -r requirements.txt
 # Initial invocation of osmx-update
-- su - ubuntu -c "/opt/onramp/app/venv/bin/python /opt/onramp/app/osmx-update /mnt/data/planet.osmx https://planet.openstreetmap.org/replication/minute/ 2>&1 | /usr/bin/logger -t osmx-update"
+- su - ubuntu -c "/opt/onramp/app/venv/bin/python /opt/onramp/app/osmx-update %%OSMX_UPDATE_OPTS%% /mnt/data/planet.osmx https://planet.openstreetmap.org/replication/minute/ 2>&1 | /usr/bin/logger -t osmx-update"
 # Write crontab entry to invoke osmx-update every minute
-- echo "* * * * * ubuntu /opt/onramp/app/venv/bin/python /opt/onramp/app/osmx-update /mnt/data/planet.osmx https://planet.openstreetmap.org/replication/minute/ 2>&1 | /usr/bin/logger -t osmx-update" >>/etc/crontab
+- echo "* * * * * ubuntu /opt/onramp/app/venv/bin/python /opt/onramp/app/osmx-update %%OSMX_UPDATE_OPTS%% /mnt/data/planet.osmx https://planet.openstreetmap.org/replication/minute/ 2>&1 | /usr/bin/logger -t osmx-update" >>/etc/crontab
