@@ -3,7 +3,7 @@ mounts:
 - [ /dev/nvme0n1p1, /mnt/data/ ]
 
 packages:
-# These dependencies are nessecary to build Onramp Python dependencies
+# These dependencies are necessary to build Onramp Python dependencies
 - build-essential
 - python3-dev
 # For isolating Onramp build dependencies

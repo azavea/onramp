@@ -1,8 +1,8 @@
 # Deployment
 
 This document walks through instantiating an EC2 instance that will contain a
-copy of this repository, as well as a background daemon will update the OSMX
-database using the minutely diffs of `planet.osm` [provided by
+copy of this repository, as well as a background daemon that will update the
+OSMX database using the minutely diffs of `planet.osm` [provided by
 OpenStreetMap](https://planet.openstreetmap.org/replication/minute/).
 
 An AWS account with an existing EBS snapshot containing a `planet.osmx` database
