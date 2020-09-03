@@ -28,10 +28,10 @@ aws ec2 run-instances \
     --image-id ami-0bcc094591f354be2 \
     --count 1 \
     --instance-type t3.xlarge \
-    --key-name joker \
-    --security-group-ids sg-joker \
-    --subnet-id subnet-joker \
-    --block-device-mappings "[{\"DeviceName\":\"/dev/sdf\",\"Ebs\":{\"SnapshotId\":\"snap-joker\"}}]" \
+    --key-name example \
+    --security-group-ids sg-example \
+    --subnet-id subnet-example \
+    --block-device-mappings "[{\"DeviceName\":\"/dev/sdf\",\"Ebs\":{\"SnapshotId\":\"snap-example\"}}]" \
     --user-data file://cloud-config.yml
 ```
 
