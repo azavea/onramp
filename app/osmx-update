@@ -16,6 +16,7 @@ import tempfile
 from textwrap import wrap
 import time
 
+from onramp import augmented_diff
 from server import ReplicationServer
 
 # expects osmx to be on the PATH.
@@ -23,6 +24,8 @@ osmx = "osmx"
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 def generate_augmented_diff(current_id, osmx_db, osc_gz_file, output_path):
@@ -32,9 +35,7 @@ def generate_augmented_diff(current_id, osmx_db, osc_gz_file, output_path):
     subprocess.call(["gunzip", "-kc", osc_gz_file], stdout=fd_unzipped)
     [pt1, pt2, pt3] = wrap(str(current_id).zfill(9), 3)
     output_file = os.path.join(output_path, pt1, pt2, "{}.adiff.xml".format(pt3))
-    subprocess.check_call(
-        ["python3", "./augmented_diff.py", osmx_db, path_unzipped, output_file]
-    )
+    augmented_diff(osmx_db, path_unzipped, output_file)
     logger.info(
         "Augmented diff generated for {} in {}s".format(
             current_id, time.time() - adiff_start
