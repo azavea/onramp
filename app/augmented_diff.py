@@ -3,23 +3,57 @@
 From OSMExpress https://github.com/protomaps/osmexpress Copyright 2019 Protomaps.
 All rights reserved. Licensed under 2-Clause BSD, see LICENSE
 
+Generates an augmented diff for an OSC (OsmChange) file.
+See https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs
+This script is intended to be run before the OSC file is applied to the osmx file.
+OUTPUT can be either a local file path or an AWS S3 uri
+
 """
 
 from collections import namedtuple
-from datetime import datetime
 import copy
+from datetime import datetime
+import logging
 import sys
 import xml.etree.ElementTree as ET
 import osmx
 
-# generates an augmented diff for an OSC (OsmChange) file.
-# see https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs
-# this is intended to be run before the OSC file is applied to the osmx file.
-# OUTPUT can be either a local file path or an AWS S3 uri
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler(sys.stdout))
+
+
+class Bounds:
+    def __init__(self):
+        self.minx = 180
+        self.maxx = -180
+        self.miny = 90
+        self.maxy = -90
+
+    def add(self, x, y):
+        if x < self.minx:
+            self.minx = x
+        if x > self.maxx:
+            self.maxx = x
+        if y < self.miny:
+            self.miny = y
+        if y > self.maxy:
+            self.maxy = y
+
+    def elem(self):
+        e = ET.Element("bounds")
+        e.set("minlat", str(self.miny))
+        e.set("minlon", str(self.minx))
+        e.set("maxlat", str(self.maxy))
+        e.set("maxlon", str(self.maxx))
+        return e
+
 
 if len(sys.argv) < 4:
-    print("Usage: augmented_diff.py OSMX_FILE OSC_FILE OUTPUT")
+    logger.error("Usage: augmented_diff.py OSMX_FILE OSC_FILE OUTPUT")
     exit(1)
+
 
 # 1st pass:
 # populate the collection of actions
@@ -32,10 +66,14 @@ osc = ET.parse(sys.argv[2]).getroot()
 for block in osc:
     for e in block:
         action_key = e.tag + "/" + e.get("id")
-        if action_key in actions:
-            # check the version TODO make sure this actually works
-            if obj.get("version") > actions[action_key].element.get("version"):
-                continue
+        # Always ensure we're updating to the latest version of an object for the diff
+        if action_key in actions and e.get("version") < actions[action_key].element.get(
+            "version"
+        ):
+            logger.warning(
+                "Found {} with newer version {}".format(action_key, e.get("version"))
+            )
+            continue
         actions[action_key] = Action(block.tag, e)
 
 
@@ -84,7 +122,14 @@ with osmx.Transaction(env) as txn:
             elem.set("changeset", str(o.metadata.changeset))
         else:
             # tagless nodes
-            version = locations.get(elem_id)[2]
+            try:
+                version = locations.get(elem_id)[2]
+            except TypeError:
+                # If loc is None here, it typically means that a node was created and
+                # then deleted within the diff interval. In the future we should
+                # remove these operations from the diff entirely.
+                logger.warning("No old loc found for tagless node {}".format(elem_id))
+                version = "?"
             elem.set("version", str(version))
             elem.set("user", "?")
             elem.set("uid", "?")
@@ -93,7 +138,6 @@ with osmx.Transaction(env) as txn:
 
     # 2nd pass
     # create an XML tree of actions with old and new sub-elements
-
     o = ET.Element("osm")
     o.set("version", "0.6")
     o.set(
@@ -123,8 +167,12 @@ with osmx.Transaction(env) as txn:
         else:
             obj_id = action.element.get("id")
             if not_in_db(action.element):
-                # TODO verify this is correct
-                print(
+                # Typically occurs when:
+                #  1. (TODO) An element is deleted but then restored later,
+                #     which should remain a modify operation. This will be difficult
+                #     because objects are not retained in OSMX when deleted in OSM.
+                #  2. (OK) An element was created and then modified within the diff interval
+                logger.warning(
                     "Could not find {0} {1} in db, changing to create".format(
                         action.element.tag, action.element.get("id")
                     )
@@ -209,7 +257,7 @@ with osmx.Transaction(env) as txn:
             augment(elem[0], False)
             augment(elem[1], True)
         except (TypeError, AttributeError):
-            print(
+            logger.warning(
                 "Changed {0} {1} is incomplete in db".format(
                     elem[1][0].tag, elem[1][0].get("id")
                 )
@@ -304,37 +352,10 @@ with osmx.Transaction(env) as txn:
             a.append(old)
             a.append(new)
         except (TypeError, AttributeError):
-            print("Affected relation {0} is incomplete in db".format(r))
+            logger.warning("Affected relation {0} is incomplete in db".format(r))
+
 
 # 5th pass: add bounding boxes
-
-
-class Bounds:
-    def __init__(self):
-        self.minx = 180
-        self.maxx = -180
-        self.miny = 90
-        self.maxy = -90
-
-    def add(self, x, y):
-        if x < self.minx:
-            self.minx = x
-        if x > self.maxx:
-            self.maxx = x
-        if y < self.miny:
-            self.miny = y
-        if y > self.maxy:
-            self.maxy = y
-
-    def elem(self):
-        e = ET.Element("bounds")
-        e.set("minlat", str(self.miny))
-        e.set("minlon", str(self.minx))
-        e.set("maxlat", str(self.maxy))
-        e.set("maxlon", str(self.maxx))
-        return e
-
-
 for child in o:
     if len(child[0]) > 0:
         osm_obj = child[0][0]
@@ -398,7 +419,11 @@ if sys.argv[3].startswith("s3://"):
         f.seek(0)
         key_path = url.path.lstrip("/")
         bucket.upload_fileobj(f, key_path)
-        print("Augmented Diff written to: Bucket {}, Path: {}".format(url.netloc, key_path))
+        logger.info(
+            "Augmented Diff written to: Bucket {}, Path: {}".format(
+                url.netloc, key_path
+            )
+        )
 else:
     ET.ElementTree(o).write(sys.argv[3])
-    print("Augmented Diff written to: {}".format(sys.argv[3]))
+    logger.info("Augmented Diff written to: {}".format(sys.argv[3]))
