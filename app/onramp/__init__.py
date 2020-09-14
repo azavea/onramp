@@ -89,15 +89,16 @@ def augmented_diff(osmx_file, osc_file, output_file):
         for e in block:
             action_key = e.tag + "/" + e.get("id")
             # Always ensure we're updating to the latest version of an object for the diff
-            if action_key in actions and e.get("version") < actions[
-                action_key
-            ].element.get("version"):
-                logger.warning(
-                    "Found {} with newer version {}".format(
-                        action_key, e.get("version")
+            if action_key in actions:
+                newest_version = int(actions[action_key].element.get("version"))
+                e_version = int(e.get("version"))
+                if e_version < newest_version:
+                    logger.warning(
+                        "Element {}, version {} is less than version {}".format(
+                            action_key, e_version, newest_version
+                        )
                     )
-                )
-                continue
+                    continue
             actions[action_key] = Action(block.tag, e)
 
     action_list = [v for k, v in actions.items()]
