@@ -9,6 +9,7 @@ import argparse
 from datetime import datetime, timezone
 import fcntl
 import logging
+from math import floor
 import os
 import subprocess
 import sys
@@ -28,17 +29,43 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
-def generate_augmented_diff(current_id, osmx_db, osc_gz_file, output_path):
-    # Generate Augmented Diff
+def datetime_to_adiff_sequence(datetime):
+    """ Convert a timezone aware datetime to minutely augmented diff sequence id. """
+    if datetime.tzinfo is None:
+        raise ValueError("Datetime {} must be timezone aware".format(datetime))
+    query = datetime.timestamp()
+    return int(floor((int(query) - 1347432900) / 60))
+
+
+def generate_augmented_diff(osmosis_state, osmx_db, osc_gz_file, output_path):
+    """ Generate an augmented diff for changes between osmx_db and osc_gz_file.
+
+    osmosis_state should be the state matching the osc_gz_file
+
+    osmx_db must be valid at the start time of osc_gz_file. This is not checked.
+
+    augmented diff is written to:
+    output_path/adiff_seq_id[0:3]/adiff_seq_id[3:6]/adiff_seq_id[6:9].adiff.xml
+
+    output_path can be a local file path or an s3 uri.
+
+    """
     adiff_start = time.time()
+    current_id = osmosis_state.sequence
+    adiff_seq_id = datetime_to_adiff_sequence(osmosis_state.timestamp)
+    logger.debug(
+        "OSM Change Sequence Id {} -> Minutely Augmented Diff Id {}".format(
+            current_id, adiff_seq_id
+        )
+    )
     with NamedTemporaryFile(suffix=".osc") as fp_unzipped:
         subprocess.call(["gunzip", "-kc", osc_gz_file], stdout=fp_unzipped)
-        [pt1, pt2, pt3] = wrap(str(current_id).zfill(9), 3)
+        [pt1, pt2, pt3] = wrap(str(adiff_seq_id).zfill(9), 3)
         output_file = os.path.join(output_path, pt1, pt2, "{}.adiff.xml".format(pt3))
-        augmented_diff(osmx_db, fp_unzipped.name, output_file)
+        augmented_diff(osmx_db, fp_unzipped.name, output_file, osmosis_state.timestamp)
     logger.info(
-        "Augmented diff generated for {} in {}s".format(
-            current_id, time.time() - adiff_start
+        "Augmented diff {} generated in {}s".format(
+            adiff_seq_id, time.time() - adiff_start
         )
     )
 
@@ -89,12 +116,11 @@ def main():
         while current_id <= latest:
             with NamedTemporaryFile(suffix=".osc.gz") as fp:
                 fp.write(s.get_diff_block(current_id))
-                info = s.get_state_info(current_id)
-                timestamp = info.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+                osmosis_state = s.get_state_info(current_id)
 
                 if args.augmented_diff is not None:
                     generate_augmented_diff(
-                        current_id, args.osmx_db, fp.name, args.augmented_diff
+                        osmosis_state, args.osmx_db, fp.name, args.augmented_diff
                     )
 
                 subprocess.check_call(
@@ -104,7 +130,7 @@ def main():
                         args.osmx_db,
                         fp.name,
                         str(current_id),
-                        timestamp,
+                        osmosis_state.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "--commit",
                     ]
                 )
