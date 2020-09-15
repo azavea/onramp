@@ -12,7 +12,7 @@ import logging
 import os
 import subprocess
 import sys
-import tempfile
+from tempfile import NamedTemporaryFile
 from textwrap import wrap
 import time
 
@@ -31,11 +31,11 @@ logger.addHandler(logging.StreamHandler(sys.stdout))
 def generate_augmented_diff(current_id, osmx_db, osc_gz_file, output_path):
     # Generate Augmented Diff
     adiff_start = time.time()
-    fd_unzipped, path_unzipped = tempfile.mkstemp(suffix=".osc")
-    subprocess.call(["gunzip", "-kc", osc_gz_file], stdout=fd_unzipped)
-    [pt1, pt2, pt3] = wrap(str(current_id).zfill(9), 3)
-    output_file = os.path.join(output_path, pt1, pt2, "{}.adiff.xml".format(pt3))
-    augmented_diff(osmx_db, path_unzipped, output_file)
+    with NamedTemporaryFile(suffix=".osc") as fp_unzipped:
+        subprocess.call(["gunzip", "-kc", osc_gz_file], stdout=fp_unzipped)
+        [pt1, pt2, pt3] = wrap(str(current_id).zfill(9), 3)
+        output_file = os.path.join(output_path, pt1, pt2, "{}.adiff.xml".format(pt3))
+        augmented_diff(osmx_db, fp_unzipped.name, output_file)
     logger.info(
         "Augmented diff generated for {} in {}s".format(
             current_id, time.time() - adiff_start
@@ -87,29 +87,27 @@ def main():
 
         current_id = seqnum + 1
         while current_id <= latest:
-            fd, path = tempfile.mkstemp(suffix=".osc.gz")
-            with open(fd, "wb") as f:
-                f.write(s.get_diff_block(current_id))
-            info = s.get_state_info(current_id)
-            timestamp = info.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+            with NamedTemporaryFile(suffix=".osc.gz") as fp:
+                fp.write(s.get_diff_block(current_id))
+                info = s.get_state_info(current_id)
+                timestamp = info.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            if args.augmented_diff is not None:
-                generate_augmented_diff(
-                    current_id, args.osmx_db, path, args.augmented_diff
+                if args.augmented_diff is not None:
+                    generate_augmented_diff(
+                        current_id, args.osmx_db, fp.name, args.augmented_diff
+                    )
+
+                subprocess.check_call(
+                    [
+                        osmx,
+                        "update",
+                        args.osmx_db,
+                        fp.name,
+                        str(current_id),
+                        timestamp,
+                        "--commit",
+                    ]
                 )
-
-            subprocess.check_call(
-                [
-                    osmx,
-                    "update",
-                    args.osmx_db,
-                    path,
-                    str(current_id),
-                    timestamp,
-                    "--commit",
-                ]
-            )
-            os.unlink(path)
             current_id = current_id + 1
 
     except BlockingIOError:
