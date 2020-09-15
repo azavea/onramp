@@ -66,7 +66,7 @@ def indent(elem, level=0):
             elem.tail = i
 
 
-def augmented_diff(osmx_file, osc_file, output_file):
+def augmented_diff(osmx_file, osc_file, output_file, end_timestamp):
     """ Generate an OSM Augmented Diff using osmx_file and osc_file
 
     Result written as xml to output_file, which can be a local file or S3 URI.
@@ -168,7 +168,7 @@ def augmented_diff(osmx_file, osc_file, output_file):
         o.set("version", "0.6")
         o.set(
             "generator",
-            "Overpass API not used, but achavi detects it at the start of string; OSMExpress/python/examples/augmented_diff.py",
+            "Overpass API not used, but achavi detects it at the start of string; https://github.com/azavea/onramp",
         )
 
         for action in action_list:
@@ -403,6 +403,10 @@ def augmented_diff(osmx_file, osc_file, output_file):
 
     o[:] = sorted(o, key=lambda x: int(x[1][0].get("id")))
     o[:] = sorted(o, key=sort_by_type)
+
+    meta = ET.Element("meta")
+    meta.set("osm_base", end_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    o.insert(0, meta)
 
     note = ET.Element("note")
     note.text = "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
