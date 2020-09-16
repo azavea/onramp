@@ -8,6 +8,7 @@ All rights reserved. Licensed under 2-Clause BSD, see LICENSE
 import argparse
 from datetime import datetime, timezone
 import fcntl
+import gzip
 import logging
 from math import floor
 import os
@@ -58,11 +59,10 @@ def generate_augmented_diff(osmosis_state, osmx_db, osc_gz_file, output_path):
             current_id, adiff_seq_id
         )
     )
-    with NamedTemporaryFile(suffix=".osc") as fp_unzipped:
-        subprocess.call(["gunzip", "-kc", osc_gz_file], stdout=fp_unzipped)
-        [pt1, pt2, pt3] = wrap(str(adiff_seq_id).zfill(9), 3)
-        output_file = os.path.join(output_path, pt1, pt2, "{}.adiff.xml".format(pt3))
-        augmented_diff(osmx_db, fp_unzipped.name, output_file, osmosis_state.timestamp)
+    [pt1, pt2, pt3] = wrap(str(adiff_seq_id).zfill(9), 3)
+    output_file = os.path.join(output_path, pt1, pt2, "{}.adiff.xml".format(pt3))
+    with gzip.open(osc_gz_file) as fp_unzipped:
+        augmented_diff(osmx_db, fp_unzipped, output_file, osmosis_state.timestamp)
     logger.info(
         "Augmented diff {} generated in {}s".format(
             adiff_seq_id, time.time() - adiff_start
@@ -107,33 +107,35 @@ def main():
 
         seqnum = int(seqnum)
 
-        logger.info("Sequence number is {0}".format(seqnum))
+        logger.info("OSMX sequence number is {0}".format(seqnum))
 
         latest = s.get_state_info().sequence
-        logger.info("Latest is {0}".format(latest))
+        logger.info("Latest stream sequence number is {0}".format(latest))
 
         current_id = seqnum + 1
         while current_id <= latest:
-            with NamedTemporaryFile(suffix=".osc.gz") as fp:
-                fp.write(s.get_diff_block(current_id))
-                osmosis_state = s.get_state_info(current_id)
+            fp = NamedTemporaryFile(delete=False, suffix=".osc.gz")
+            fp.write(s.get_diff_block(current_id))
+            fp.close()
+            osmosis_state = s.get_state_info(current_id)
 
-                if args.augmented_diff is not None:
-                    generate_augmented_diff(
-                        osmosis_state, args.osmx_db, fp.name, args.augmented_diff
-                    )
-
-                subprocess.check_call(
-                    [
-                        osmx,
-                        "update",
-                        args.osmx_db,
-                        fp.name,
-                        str(current_id),
-                        osmosis_state.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "--commit",
-                    ]
+            if args.augmented_diff is not None:
+                generate_augmented_diff(
+                    osmosis_state, args.osmx_db, fp.name, args.augmented_diff
                 )
+
+            subprocess.check_call(
+                [
+                    osmx,
+                    "update",
+                    args.osmx_db,
+                    fp.name,
+                    str(current_id),
+                    osmosis_state.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "--commit",
+                ]
+            )
+            os.unlink(fp.name)
             current_id = current_id + 1
 
     except BlockingIOError:
