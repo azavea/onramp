@@ -60,7 +60,7 @@ def generate_augmented_diff(osmosis_state, osmx_db, osc_gz_file, output_path):
         )
     )
     [pt1, pt2, pt3] = wrap(str(adiff_seq_id).zfill(9), 3)
-    output_file = os.path.join(output_path, pt1, pt2, "{}.adiff.xml".format(pt3))
+    output_file = os.path.join(output_path, pt1, pt2, "{}.xml.gz".format(pt3))
     with gzip.open(osc_gz_file) as fp_unzipped:
         augmented_diff(osmx_db, fp_unzipped, output_file, osmosis_state.timestamp)
     logger.info(
