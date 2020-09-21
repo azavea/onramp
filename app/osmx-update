@@ -38,7 +38,9 @@ def datetime_to_adiff_sequence(datetime):
     return int(floor((int(query) - 1347432900) / 60))
 
 
-def generate_augmented_diff(osmosis_state, osmx_db, osc_gz_file, output_path):
+def generate_augmented_diff(
+    osmosis_state, osmx_db, osc_gz_file, output_path, replication_server_url
+):
     """ Generate an augmented diff for changes between osmx_db and osc_gz_file.
 
     osmosis_state should be the state matching the osc_gz_file
@@ -47,6 +49,8 @@ def generate_augmented_diff(osmosis_state, osmx_db, osc_gz_file, output_path):
 
     augmented diff is written to:
     output_path/adiff_seq_id[0:3]/adiff_seq_id[3:6]/adiff_seq_id[6:9].adiff.xml
+    By converting osmosis_state.timestamp to minutely adiff_seq_id via
+    datetime_to_adiff_sequence().
 
     output_path can be a local file path or an s3 uri.
 
@@ -55,14 +59,21 @@ def generate_augmented_diff(osmosis_state, osmx_db, osc_gz_file, output_path):
     current_id = osmosis_state.sequence
     adiff_seq_id = datetime_to_adiff_sequence(osmosis_state.timestamp)
     logger.debug(
-        "OSM Change Sequence Id {} -> Minutely Augmented Diff Id {}".format(
-            current_id, adiff_seq_id
+        "OSM Change Sequence Id {} @ {} -> Minutely Augmented Diff Id {}".format(
+            current_id, osmosis_state.timestamp, adiff_seq_id
         )
     )
     [pt1, pt2, pt3] = wrap(str(adiff_seq_id).zfill(9), 3)
     output_file = os.path.join(output_path, pt1, pt2, "{}.xml.gz".format(pt3))
     with gzip.open(osc_gz_file) as fp_unzipped:
-        augmented_diff(osmx_db, fp_unzipped, output_file, osmosis_state.timestamp)
+        augmented_diff(
+            osmx_db,
+            fp_unzipped,
+            output_file,
+            end_timestamp=osmosis_state.timestamp,
+            osc_sequence=osmosis_state.sequence,
+            osc_url=replication_server_url,
+        )
     logger.info(
         "Augmented diff {} generated in {}s".format(
             adiff_seq_id, time.time() - adiff_start
@@ -121,7 +132,11 @@ def main():
 
             if args.augmented_diff is not None:
                 generate_augmented_diff(
-                    osmosis_state, args.osmx_db, fp.name, args.augmented_diff
+                    osmosis_state,
+                    args.osmx_db,
+                    fp.name,
+                    args.augmented_diff,
+                    args.replication_server,
                 )
 
             subprocess.check_call(

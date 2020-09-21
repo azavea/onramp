@@ -66,8 +66,17 @@ def indent(elem, level=0):
             elem.tail = i
 
 
-def augmented_diff(osmx_file, osc_file, output_file, end_timestamp):
+def augmented_diff(
+    osmx_file,
+    osc_file,
+    output_file,
+    end_timestamp=None,
+    osc_sequence=None,
+    osc_url=None,
+):
     """ Generate an OSM Augmented Diff using osmx_file and osc_file
+
+    end_timestamp is the timestamp of the end of the time range in the osc_file.
 
     Result written as xml to output_file, which can be a local file or S3 URI.
 
@@ -405,7 +414,18 @@ def augmented_diff(osmx_file, osc_file, output_file, end_timestamp):
     o[:] = sorted(o, key=sort_by_type)
 
     meta = ET.Element("meta")
-    meta.set("osm_base", end_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    if end_timestamp is not None:
+        meta.set("osm_base", end_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    else:
+        logger.warning("No end_timestamp provided, cannot set meta.osm_base!")
+    if osc_sequence is not None:
+        meta.set("replication_id", str(osc_sequence))
+    else:
+        logger.warning("No osc_sequence provided, cannot set meta.replication_id!")
+    if osc_url is not None:
+        meta.set("replication_url", str(osc_url))
+    else:
+        logger.warning("No osc_url provided, cannot set meta.replication_url!")
     o.insert(0, meta)
 
     note = ET.Element("note")
