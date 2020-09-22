@@ -35,7 +35,7 @@ def datetime_to_adiff_sequence(datetime):
     if datetime.tzinfo is None:
         raise ValueError("Datetime {} must be timezone aware".format(datetime))
     query = datetime.timestamp()
-    return int(floor((int(query) - 1347432900) / 60))
+    return int(floor((int(query) - 1347432960) / 60))
 
 
 def generate_augmented_diff(
