@@ -183,11 +183,11 @@ def augmented_diff(
         for action in action_list:
             a = ET.SubElement(o, "action")
             a.set("type", action.type)
-            old = ET.SubElement(a, "old")
-            new = ET.SubElement(a, "new")
             if action.type == "create":
-                new.append(action.element)
+                a.append(action.element)
             elif action.type == "delete":
+                old = ET.SubElement(a, "old")
+                new = ET.SubElement(a, "new")
                 # get the old metadata
                 modified = copy.deepcopy(action.element)
                 set_old_metadata(action.element)
@@ -199,52 +199,53 @@ def augmented_diff(
                 # TODO the Geofabrik deleted elements seem to have the old metadata and old version numbers
                 # check if this is true of planet replication files
                 new.append(modified)
+            elif not_in_db(action.element):
+                # Typically occurs when:
+                #  1. (TODO) An element is deleted but then restored later,
+                #     which should remain a modify operation. This will be difficult
+                #     because objects are not retained in OSMX when deleted in OSM.
+                #  2. (OK) An element was created and then modified within the diff interval
+                logger.warning(
+                    "Could not find {0} {1} in db, changing to create".format(
+                        action.element.tag, action.element.get("id")
+                    )
+                )
+                a.append(action.element)
+                a.set("type", "create")
             else:
                 obj_id = action.element.get("id")
-                if not_in_db(action.element):
-                    # Typically occurs when:
-                    #  1. (TODO) An element is deleted but then restored later,
-                    #     which should remain a modify operation. This will be difficult
-                    #     because objects are not retained in OSMX when deleted in OSM.
-                    #  2. (OK) An element was created and then modified within the diff interval
-                    logger.warning(
-                        "Could not find {0} {1} in db, changing to create".format(
-                            action.element.tag, action.element.get("id")
-                        )
-                    )
-                    new.append(action.element)
-                    a.set("type", "create")
+                old = ET.SubElement(a, "old")
+                new = ET.SubElement(a, "new")
+                prev_version = ET.SubElement(old, action.element.tag)
+                prev_version.set("id", obj_id)
+                set_old_metadata(prev_version)
+                if action.element.tag == "node":
+                    ll = get_lat_lon(obj_id, False)
+                    prev_version.set("lon", ll[0])
+                    prev_version.set("lat", ll[1])
+                elif action.element.tag == "way":
+                    way = ways.get(obj_id)
+                    for n in way.nodes:
+                        node = ET.SubElement(prev_version, "nd")
+                        node.set("ref", str(n))
+                    it = iter(way.tags)
+                    for t in it:
+                        tag = ET.SubElement(prev_version, "tag")
+                        tag.set("k", t)
+                        tag.set("v", next(it))
                 else:
-                    prev_version = ET.SubElement(old, action.element.tag)
-                    prev_version.set("id", obj_id)
-                    set_old_metadata(prev_version)
-                    if action.element.tag == "node":
-                        ll = get_lat_lon(obj_id, False)
-                        prev_version.set("lon", ll[0])
-                        prev_version.set("lat", ll[1])
-                    elif action.element.tag == "way":
-                        way = ways.get(obj_id)
-                        for n in way.nodes:
-                            node = ET.SubElement(prev_version, "nd")
-                            node.set("ref", str(n))
-                        it = iter(way.tags)
-                        for t in it:
-                            tag = ET.SubElement(prev_version, "tag")
-                            tag.set("k", t)
-                            tag.set("v", next(it))
-                    else:
-                        relation = relations.get(obj_id)
-                        for m in relation.members:
-                            member = ET.SubElement(prev_version, "member")
-                            member.set("ref", str(m.ref))
-                            member.set("role", m.role)
-                            member.set("type", str(m.type))
-                        it = iter(relation.tags)
-                        for t in it:
-                            tag = ET.SubElement(prev_version, "tag")
-                            tag.set("k", t)
-                            tag.set("v", next(it))
-                    new.append(action.element)
+                    relation = relations.get(obj_id)
+                    for m in relation.members:
+                        member = ET.SubElement(prev_version, "member")
+                        member.set("ref", str(m.ref))
+                        member.set("role", m.role)
+                        member.set("type", str(m.type))
+                    it = iter(relation.tags)
+                    for t in it:
+                        tag = ET.SubElement(prev_version, "tag")
+                        tag.set("k", t)
+                        tag.set("v", next(it))
+                new.append(action.element)
 
         # 3rd pass
         # Augment the created "old" and "new" elements
@@ -276,21 +277,22 @@ def augmented_diff(
                 mem.set("lat", ll[1])
 
         def augment(elem, use_new):
-            if len(elem) == 0:
-                return
-            if elem[0].tag == "way":
-                for child in elem[0]:
+            if elem.tag == "way":
+                for child in elem:
                     if child.tag == "nd":
                         augment_nd(child, use_new)
-            elif elem[0].tag == "relation":
-                for child in elem[0]:
+            elif elem:
+                for child in elem:
                     if child.tag == "member":
                         augment_member(child, use_new)
 
         for elem in o:
             try:
-                augment(elem[0], False)
-                augment(elem[1], True)
+                if elem.get("type") == "create":
+                    augment(elem[0], True)
+                else:
+                    augment(elem[0][0], False)
+                    augment(elem[1][0], True)
             except (TypeError, AttributeError):
                 logger.warning(
                     "Changed {0} {1} is incomplete in db".format(
@@ -355,8 +357,8 @@ def augmented_diff(
             new = ET.SubElement(a, "new")
             new_elem = copy.deepcopy(way_element)
             new.append(new_elem)
-            augment(old, False)
-            augment(new, True)
+            augment(way_element, False)
+            augment(new_elem, True)
 
         for r in affected_relations:
             old = ET.Element("old")
@@ -380,8 +382,8 @@ def augmented_diff(
             new = ET.Element("new")
             new.append(new_elem)
             try:
-                augment(old, False)
-                augment(new, True)
+                augment(relation_element, False)
+                augment(new_elem, True)
                 a = ET.SubElement(o, "action")
                 a.set("type", "modify")
                 a.append(old)
@@ -392,7 +394,7 @@ def augmented_diff(
     # 5th pass: add bounding boxes
     for child in o:
         if len(child[0]) > 0:
-            osm_obj = child[0][0]
+            osm_obj = child[0] if child.get("type") == "create" else child[0][0]
             nds = osm_obj.findall(".//nd")
             if nds:
                 bounds = Bounds()
@@ -403,16 +405,21 @@ def augmented_diff(
     # 6th pass
     # sort by node, way, relation
     # within each, sorted by increasing ID
+    def sort_by_id(x):
+        return int(x[0].get("id") if x.get("type") == "create" else x[1][0].get("id"))
+
     def sort_by_type(x):
-        if x[1][0].tag == "node":
+        osm_element = x[0] if x.get("type") == "create" else x[1][0]
+        if osm_element.tag == "node":
             return 1
-        elif x[1][0].tag == "way":
+        elif osm_element.tag == "way":
             return 2
         return 3
 
-    o[:] = sorted(o, key=lambda x: int(x[1][0].get("id")))
+    o[:] = sorted(o, key=sort_by_id)
     o[:] = sorted(o, key=sort_by_type)
 
+    # Set diff metadata
     meta = ET.Element("meta")
     if end_timestamp is not None:
         meta.set("osm_base", end_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"))
@@ -428,6 +435,7 @@ def augmented_diff(
         logger.warning("No osc_url provided, cannot set meta.replication_url!")
     o.insert(0, meta)
 
+    # Set diff note
     note = ET.Element("note")
     note.text = "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
     o.insert(0, note)

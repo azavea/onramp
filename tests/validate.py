@@ -104,7 +104,7 @@ def main():
     parser.add_argument("--detailed", action="store_true")
     args = parser.parse_args()
 
-    [pt1, pt2, pt3] = wrap(str(int(args.augmented_diff_id) + 1).zfill(9), 3)
+    [pt1, pt2, pt3] = wrap(str(int(args.augmented_diff_id)).zfill(9), 3)
 
     # Load onramp diff from local path
     onramp_path = os.path.join(args.onramp_path, pt1, pt2, "{}.xml.gz".format(pt3))
@@ -164,17 +164,26 @@ def main():
     if args.detailed:
         equal_elements = set()
         for element in intersection:
-            onramp_element = onramp_root_element.find(
-                "./action[@type='{}']/{}/{}[@id='{}'][@version='{}']".format(*element)
-            )
-            overpass_element = overpass_root_element.find(
-                "./action[@type='{}']/{}/{}[@id='{}'][@version='{}']".format(*element)
-            )
-            if overpass_element is None:
-                # Try again for create ops which don't have the intermediate 'new/old' element
+            if element[0] == "create":
+                onramp_element = onramp_root_element.find(
+                    "./action[@type='{}']/{}[@id='{}'][@version='{}']".format(
+                        element[0], element[2], element[3], element[4]
+                    )
+                )
                 overpass_element = overpass_root_element.find(
                     "./action[@type='{}']/{}[@id='{}'][@version='{}']".format(
                         element[0], element[2], element[3], element[4]
+                    )
+                )
+            else:
+                onramp_element = onramp_root_element.find(
+                    "./action[@type='{}']/{}/{}[@id='{}'][@version='{}']".format(
+                        *element
+                    )
+                )
+                overpass_element = overpass_root_element.find(
+                    "./action[@type='{}']/{}/{}[@id='{}'][@version='{}']".format(
+                        *element
                     )
                 )
             if (
@@ -184,8 +193,8 @@ def main():
             ):
                 equal_elements.add(element)
 
+        # print(equal_elements)
         print("{}/{} elements are equal".format(len(equal_elements), len(intersection)))
-        print(equal_elements)
 
 
 if __name__ == "__main__":
