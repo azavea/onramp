@@ -49,7 +49,7 @@ def s3_gzip_writer(element_tree, output_file, logger=None):
         # Write to Gzip file handle in order to compress directly to the
         # compressed_fp in memory buffer
         with gzip.GzipFile(fileobj=compressed_fp, mode="wb") as gz:
-            element_tree.write(gz)
+            element_tree.write(gz, encoding="UTF-8")
         compressed_fp.seek(0)
         bucket.upload_fileobj(
             compressed_fp,
@@ -76,7 +76,7 @@ def s3_writer(element_tree, output_file, logger=None):
     s3 = boto3.resource("s3")
     bucket = s3.Bucket(url.netloc)
     with BytesIO() as fp:
-        element_tree.write(fp)
+        element_tree.write(fp, encoding="UTF-8")
         fp.seek(0)
         key_path = url.path.lstrip("/")
         bucket.upload_fileobj(fp, key_path, {"ContentType": "text/xml"})
@@ -100,7 +100,7 @@ def file_gzip_writer(element_tree, output_file, logger=None):
     if len(output_path) > 0:
         os.makedirs(output_path, exist_ok=True)
     with gzip.open(output_file, "wb") as fp:
-        element_tree.write(fp)
+        element_tree.write(fp, encoding="UTF-8")
     logger.info("Augmented Diff written to: {} (gzip=True)".format(output_file))
 
 
@@ -117,5 +117,5 @@ def file_writer(element_tree, output_file, logger=None):
     if len(output_path) > 0:
         os.makedirs(output_path, exist_ok=True)
     with open(output_file, "wb") as fp:
-        element_tree.write(fp)
+        element_tree.write(fp, encoding="UTF-8")
     logger.info("Augmented Diff written to: {} (gzip=False)".format(output_file))
