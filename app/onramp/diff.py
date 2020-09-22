@@ -394,13 +394,17 @@ def augmented_diff(
     # 5th pass: add bounding boxes
     for child in o:
         if len(child[0]) > 0:
-            osm_obj = child[0] if child.get("type") == "create" else child[0][0]
-            nds = osm_obj.findall(".//nd")
-            if nds:
-                bounds = Bounds()
-                for nd in nds:
-                    bounds.add(float(nd.get("lon")), float(nd.get("lat")))
-                osm_obj.insert(0, bounds.elem())
+            if child.get("type") == "create":
+                osm_objs = [child[0]]
+            else:
+                osm_objs = [child[0][0], child[1][0]]
+            for osm_obj in osm_objs:
+                nds = osm_obj.findall(".//nd")
+                if nds:
+                    bounds = Bounds()
+                    for nd in nds:
+                        bounds.add(float(nd.get("lon")), float(nd.get("lat")))
+                    osm_obj.insert(0, bounds.elem())
 
     # 6th pass
     # sort by node, way, relation
