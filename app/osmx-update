@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 import fcntl
 import gzip
 import logging
-from math import floor
 import os
 import subprocess
 import sys
@@ -18,7 +17,11 @@ from tempfile import NamedTemporaryFile
 from textwrap import wrap
 import time
 
-from onramp import augmented_diff
+from onramp import (
+    augmented_diff,
+    datetime_to_adiff_sequence,
+    write_augmented_diff_status,
+)
 from server import ReplicationServer
 
 # expects osmx to be on the PATH.
@@ -28,14 +31,6 @@ osmx = "osmx"
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
-
-
-def datetime_to_adiff_sequence(datetime):
-    """ Convert a timezone aware datetime to minutely augmented diff sequence id. """
-    if datetime.tzinfo is None:
-        raise ValueError("Datetime {} must be timezone aware".format(datetime))
-    query = datetime.timestamp()
-    return int(floor((int(query) - 1347432960) / 60))
 
 
 def generate_augmented_diff(
@@ -74,6 +69,7 @@ def generate_augmented_diff(
             osc_sequence=osmosis_state.sequence,
             osc_url=replication_server_url,
         )
+    write_augmented_diff_status(output_path, adiff_seq_id)
     logger.info(
         "Augmented diff {} generated in {}s".format(
             adiff_seq_id, time.time() - adiff_start
