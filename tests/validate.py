@@ -144,6 +144,7 @@ def main():
     intersection = onramp_elements_set.intersection(overpass_elements_set)
     if args.detailed:
         equal_elements = set()
+        different_elements = set()
         for element in intersection:
             if element[0] == "create":
                 onramp_element = onramp_root_element.find(
@@ -173,9 +174,13 @@ def main():
                 and elements_equal(onramp_element, overpass_element)
             ):
                 equal_elements.add(element)
+            else:
+                # print(element)
+                different_elements.add(element)
 
         # print(equal_elements)
         print("{}/{} elements are equal".format(len(equal_elements), len(intersection)))
+        print("Different: {}".format(list(different_elements)[:20]))
 
 
 if __name__ == "__main__":
