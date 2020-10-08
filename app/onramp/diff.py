@@ -41,10 +41,10 @@ class Bounds:
 
     def elem(self):
         e = ET.Element("bounds")
-        e.set("minlat", str(self.miny))
-        e.set("minlon", str(self.minx))
-        e.set("maxlat", str(self.maxy))
-        e.set("maxlon", str(self.maxx))
+        e.set("minlat", "{:.07f}".format(self.miny))
+        e.set("minlon", "{:.07f}".format(self.minx))
+        e.set("maxlat", "{:.07f}".format(self.maxy))
+        e.set("maxlon", "{:.07f}".format(self.maxx))
         return e
 
 
@@ -131,19 +131,43 @@ def augmented_diff(
         def get_lat_lon(ref, use_new):
             if use_new and ("node/" + ref in actions):
                 node = actions["node/" + ref]
-                return (node.element.get("lon"), node.element.get("lat"))
+                lon = "{:.07f}".format(float(node.element.get("lon")))
+                lat = "{:.07f}".format(float(node.element.get("lat")))
+                return (lon, lat)
             else:
                 ll = locations.get(ref)
-                return (str(ll[1]), str(ll[0]))
+                return ("{:.07f}".format(ll[1]), "{:.07f}".format(ll[0]))
 
-        def set_old_metadata(elem):
+        def rebuild_old_element(elem):
             elem_id = int(elem.get("id"))
             if elem.tag == "node":
                 o = nodes.get(elem_id)
+                ll = get_lat_lon(elem_id, False)
+                elem.set("lon", ll[0])
+                elem.set("lat", ll[1])
             elif elem.tag == "way":
                 o = ways.get(elem_id)
+                for n in o.nodes:
+                    node = ET.SubElement(elem, "nd")
+                    node.set("ref", str(n))
+                it = iter(o.tags)
+                for t in it:
+                    tag = ET.SubElement(elem, "tag")
+                    tag.set("k", t)
+                    tag.set("v", next(it))
             else:
                 o = relations.get(elem_id)
+                for m in o.members:
+                    member = ET.SubElement(elem, "member")
+                    member.set("ref", str(m.ref))
+                    member.set("role", m.role)
+                    member.set("type", str(m.type))
+                it = iter(o.tags)
+                for t in it:
+                    tag = ET.SubElement(elem, "tag")
+                    tag.set("k", t)
+                    tag.set("v", next(it))
+
             if o:
                 elem.set("version", str(o.metadata.version))
                 elem.set("user", str(o.metadata.user))
@@ -190,7 +214,7 @@ def augmented_diff(
                 new = ET.SubElement(a, "new")
                 # get the old metadata
                 modified = copy.deepcopy(action.element)
-                set_old_metadata(action.element)
+                rebuild_old_element(action.element)
                 old.append(action.element)
 
                 modified.set("visible", "false")
@@ -218,33 +242,7 @@ def augmented_diff(
                 new = ET.SubElement(a, "new")
                 prev_version = ET.SubElement(old, action.element.tag)
                 prev_version.set("id", obj_id)
-                set_old_metadata(prev_version)
-                if action.element.tag == "node":
-                    ll = get_lat_lon(obj_id, False)
-                    prev_version.set("lon", ll[0])
-                    prev_version.set("lat", ll[1])
-                elif action.element.tag == "way":
-                    way = ways.get(obj_id)
-                    for n in way.nodes:
-                        node = ET.SubElement(prev_version, "nd")
-                        node.set("ref", str(n))
-                    it = iter(way.tags)
-                    for t in it:
-                        tag = ET.SubElement(prev_version, "tag")
-                        tag.set("k", t)
-                        tag.set("v", next(it))
-                else:
-                    relation = relations.get(obj_id)
-                    for m in relation.members:
-                        member = ET.SubElement(prev_version, "member")
-                        member.set("ref", str(m.ref))
-                        member.set("role", m.role)
-                        member.set("type", str(m.type))
-                    it = iter(relation.tags)
-                    for t in it:
-                        tag = ET.SubElement(prev_version, "tag")
-                        tag.set("k", t)
-                        tag.set("v", next(it))
+                rebuild_old_element(prev_version)
                 new.append(action.element)
 
         # 3rd pass
@@ -343,16 +341,7 @@ def augmented_diff(
             old = ET.SubElement(a, "old")
             way_element = ET.SubElement(old, "way")
             way_element.set("id", str(w))
-            set_old_metadata(way_element)
-            way = ways.get(w)
-            for n in way.nodes:
-                node = ET.SubElement(way_element, "nd")
-                node.set("ref", str(n))
-            it = iter(way.tags)
-            for t in it:
-                tag = ET.SubElement(way_element, "tag")
-                tag.set("k", t)
-                tag.set("v", next(it))
+            rebuild_old_element(way_element)
 
             new = ET.SubElement(a, "new")
             new_elem = copy.deepcopy(way_element)
@@ -364,19 +353,7 @@ def augmented_diff(
             old = ET.Element("old")
             relation_element = ET.SubElement(old, "relation")
             relation_element.set("id", str(r))
-            set_old_metadata(relation_element)
-            relation = relations.get(r)
-
-            for m in relation.members:
-                member = ET.SubElement(relation_element, "member")
-                member.set("ref", str(m.ref))
-                member.set("role", m.role)
-                member.set("type", str(m.type))
-            it = iter(relation.tags)
-            for t in it:
-                tag = ET.SubElement(relation_element, "tag")
-                tag.set("k", t)
-                tag.set("v", next(it))
+            rebuild_old_element(relation_element)
 
             new_elem = copy.deepcopy(relation_element)
             new = ET.Element("new")
@@ -384,6 +361,7 @@ def augmented_diff(
             try:
                 augment(relation_element, False)
                 augment(new_elem, True)
+
                 a = ET.SubElement(o, "action")
                 a.set("type", "modify")
                 a.append(old)
