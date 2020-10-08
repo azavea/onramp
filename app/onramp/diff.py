@@ -41,10 +41,10 @@ class Bounds:
 
     def elem(self):
         e = ET.Element("bounds")
-        e.set("minlat", str(self.miny))
-        e.set("minlon", str(self.minx))
-        e.set("maxlat", str(self.maxy))
-        e.set("maxlon", str(self.maxx))
+        e.set("minlat", "{:.07f}".format(self.miny))
+        e.set("minlon", "{:.07f}".format(self.minx))
+        e.set("maxlat", "{:.07f}".format(self.maxy))
+        e.set("maxlon", "{:.07f}".format(self.maxx))
         return e
 
 
@@ -131,10 +131,12 @@ def augmented_diff(
         def get_lat_lon(ref, use_new):
             if use_new and ("node/" + ref in actions):
                 node = actions["node/" + ref]
-                return (node.element.get("lon"), node.element.get("lat"))
+                lon = "{:.07f}".format(float(node.element.get("lon")))
+                lat = "{:.07f}".format(float(node.element.get("lat")))
+                return (lon, lat)
             else:
                 ll = locations.get(ref)
-                return (str(ll[1]), str(ll[0]))
+                return ("{:.07f}".format(ll[1]), "{:.07f}".format(ll[0]))
 
         def rebuild_old_element(elem):
             elem_id = int(elem.get("id"))
