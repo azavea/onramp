@@ -2,11 +2,7 @@ import argparse
 from collections import Counter
 import gzip
 import json
-import os
 from pathlib import Path
-from tempfile import NamedTemporaryFile
-from textwrap import wrap
-from urllib.request import urlretrieve
 import xml.etree.ElementTree as ET
 
 
@@ -98,34 +94,19 @@ def elements_from_root(root_element):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--augmented_diff_id", type=str)
-    parser.add_argument("--onramp-path", type=str)
+    parser.add_argument("--onramp-diff", type=str)
     parser.add_argument("--overpass-diff", type=Path, default=None)
     parser.add_argument("--detailed", action="store_true")
     args = parser.parse_args()
 
-    [pt1, pt2, pt3] = wrap(str(int(args.augmented_diff_id)).zfill(9), 3)
-
     # Load onramp diff from local path
-    onramp_path = os.path.join(args.onramp_path, pt1, pt2, "{}.xml.gz".format(pt3))
-    with gzip.open(onramp_path) as fp:
+    with gzip.open(args.onramp_diff) as fp:
         onramp_root_element = ET.parse(fp).getroot()
     onramp_elements = elements_from_root(onramp_root_element)
     onramp_elements_set = set(onramp_elements)
-    print("Loaded {} elements from {}...".format(len(onramp_elements_set), onramp_path))
 
-    # Pull, open and parse Overpass API augmented diff
-    overpass_root_element = None
-    if args.overpass_diff is not None:
-        overpass_root_element = ET.parse(str(args.overpass_diff)).getroot()
-    else:
-        overpass_url = "http://overpass-api.de/api/augmented_diff?id={}".format(
-            args.augmented_diff_id
-        )
-        with NamedTemporaryFile(delete=False) as fp:
-            print("Writing overpass diff to {}...".format(fp.name))
-            urlretrieve(overpass_url, fp.name)
-            overpass_root_element = ET.parse(fp.name).getroot()
+    # Open and parse Overpass API augmented diff
+    overpass_root_element = ET.parse(str(args.overpass_diff)).getroot()
     overpass_elements = elements_from_root(overpass_root_element)
     overpass_elements_set = set(overpass_elements)
 
