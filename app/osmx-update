@@ -22,6 +22,7 @@ from onramp import (
     datetime_to_adiff_sequence,
     write_augmented_diff_status,
 )
+from onramp.exceptions import EmptyDiffException
 from server import ReplicationServer
 
 # expects osmx to be on the PATH.
@@ -60,21 +61,24 @@ def generate_augmented_diff(
     )
     [pt1, pt2, pt3] = wrap(str(adiff_seq_id).zfill(9), 3)
     output_file = os.path.join(output_path, pt1, pt2, "{}.xml.gz".format(pt3))
-    with gzip.open(osc_gz_file) as fp_unzipped:
-        augmented_diff(
-            osmx_db,
-            fp_unzipped,
-            output_file,
-            end_timestamp=osmosis_state.timestamp,
-            osc_sequence=osmosis_state.sequence,
-            osc_url=replication_server_url,
+    try:
+        with gzip.open(osc_gz_file) as fp_unzipped:
+            augmented_diff(
+                osmx_db,
+                fp_unzipped,
+                output_file,
+                end_timestamp=osmosis_state.timestamp,
+                osc_sequence=osmosis_state.sequence,
+                osc_url=replication_server_url,
+            )
+        write_augmented_diff_status(output_path, adiff_seq_id)
+        logger.info(
+            "\tAugmented diff {} generated in {}s".format(
+                adiff_seq_id, time.time() - adiff_start
+            )
         )
-    write_augmented_diff_status(output_path, adiff_seq_id)
-    logger.info(
-        "Augmented diff {} generated in {}s".format(
-            adiff_seq_id, time.time() - adiff_start
-        )
-    )
+    except EmptyDiffException:
+        logger.info("\tEmpty diff - no write")
 
 
 def main():

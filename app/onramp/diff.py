@@ -13,6 +13,7 @@ import sys
 import osmx
 import xml.etree.ElementTree as ET
 
+from .exceptions import EmptyDiffException
 from .xml_writers import write_xml
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,8 @@ def augmented_diff(
     This function should be called on an osmx_file that hasn't yet had osc_file
     written to it.
 
+    Raises `onramp.exceptions.EmptyDiffException` if no elements in osc_file
+
     """
 
     # 1st pass:
@@ -111,6 +114,8 @@ def augmented_diff(
             actions[action_key] = Action(block.tag, e)
 
     action_list = [v for k, v in actions.items()]
+    if len(action_list) == 0:
+        raise EmptyDiffException()
 
     env = osmx.Environment(osmx_file)
     with osmx.Transaction(env) as txn:
