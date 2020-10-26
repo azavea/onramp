@@ -13,7 +13,6 @@ import sys
 import osmx
 import xml.etree.ElementTree as ET
 
-from .exceptions import EmptyDiffException
 from .geometry import Bounds
 from .utils import indent
 from .xml_writers import write_xml
@@ -40,8 +39,6 @@ def augmented_diff(
     See https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs
     This function should be called on an osmx_file that hasn't yet had osc_file
     written to it.
-
-    Raises `onramp.exceptions.EmptyDiffException` if no elements in osc_file
 
     """
 
@@ -70,8 +67,6 @@ def augmented_diff(
             actions[action_key] = Action(block.tag, e)
 
     action_list = [v for k, v in actions.items()]
-    if len(action_list) == 0:
-        raise EmptyDiffException()
 
     env = osmx.Environment(osmx_file)
     with osmx.Transaction(env) as txn:
