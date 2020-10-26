@@ -225,8 +225,8 @@ def augmented_diff(
                 modified.set("visible", "false")
                 for child in list(modified):
                     modified.remove(child)
-                # TODO the Geofabrik deleted elements seem to have the old metadata and old version numbers
-                # check if this is true of planet replication files
+                # TODO: The Geofabrik deleted elements seem to have the old metadata and
+                # old version numbers. Check if this is true of planet replication files
                 new.append(modified)
             elif not_in_db(action.element):
                 # Typically occurs when:
@@ -304,10 +304,10 @@ def augmented_diff(
                 )
 
         # 4th pass:
-        # find changes that propagate to referencing elements:
-        # when a node's location changes, that propagates to any ways it belongs to, relations it belongs to
-        # and also any relations that the way belongs to
-        # when a way's member list changes, it propagates to any relations it belongs to
+        # Find changes that propagate to referencing elements:
+        # When a node's location changes, that propagates to any ways it belongs to,
+        # relations it belongs to and also any relations that the way belongs to.
+        # When a way's member list changes, it propagates to any relations it belongs to.
         node_way = osmx.NodeWay(txn)
         node_relation = osmx.NodeRelation(txn)
         way_relation = osmx.WayRelation(txn)
