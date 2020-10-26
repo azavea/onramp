@@ -14,57 +14,13 @@ import osmx
 import xml.etree.ElementTree as ET
 
 from .exceptions import EmptyDiffException
+from .geometry import Bounds
+from .utils import indent
 from .xml_writers import write_xml
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
-
-
-class Bounds:
-    """ Iteratively construct bounding box for a series of (x, y) points. """
-
-    def __init__(self):
-        self.minx = 180
-        self.maxx = -180
-        self.miny = 90
-        self.maxy = -90
-
-    def add(self, x, y):
-        if x < self.minx:
-            self.minx = x
-        if x > self.maxx:
-            self.maxx = x
-        if y < self.miny:
-            self.miny = y
-        if y > self.maxy:
-            self.maxy = y
-
-    def elem(self):
-        e = ET.Element("bounds")
-        e.set("minlat", "{:.07f}".format(self.miny))
-        e.set("minlon", "{:.07f}".format(self.minx))
-        e.set("maxlat", "{:.07f}".format(self.maxy))
-        e.set("maxlon", "{:.07f}".format(self.maxx))
-        return e
-
-
-# pretty print helper
-# http://effbot.org/zone/element-lib.htm#prettyprint
-def indent(elem, level=0):
-    i = "\n" + level * "  "
-    if len(elem):
-        if not elem.text or not elem.text.strip():
-            elem.text = i + "  "
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-        for elem in elem:
-            indent(elem, level + 1)
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-    else:
-        if level and (not elem.tail or not elem.tail.strip()):
-            elem.tail = i
 
 
 def augmented_diff(

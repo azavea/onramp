@@ -2,7 +2,6 @@ import gzip
 from io import BytesIO
 import logging
 import os
-import shutil
 import sys
 from urllib.parse import urlparse
 

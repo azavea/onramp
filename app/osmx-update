@@ -17,12 +17,9 @@ from tempfile import NamedTemporaryFile
 from textwrap import wrap
 import time
 
-from onramp import (
-    augmented_diff,
-    datetime_to_adiff_sequence,
-    write_augmented_diff_status,
-)
+from onramp.diff import augmented_diff
 from onramp.exceptions import EmptyDiffException
+from onramp.utils import datetime_to_adiff_sequence, write_augmented_diff_status
 from server import ReplicationServer
 
 # expects osmx to be on the PATH.
