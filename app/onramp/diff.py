@@ -13,57 +13,14 @@ import sys
 import osmx
 import xml.etree.ElementTree as ET
 
+from .exceptions import EmptyDiffException
+from .geometry import Bounds
+from .utils import indent
 from .xml_writers import write_xml
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
-
-
-class Bounds:
-    """ Iteratively construct bounding box for a series of (x, y) points. """
-
-    def __init__(self):
-        self.minx = 180
-        self.maxx = -180
-        self.miny = 90
-        self.maxy = -90
-
-    def add(self, x, y):
-        if x < self.minx:
-            self.minx = x
-        if x > self.maxx:
-            self.maxx = x
-        if y < self.miny:
-            self.miny = y
-        if y > self.maxy:
-            self.maxy = y
-
-    def elem(self):
-        e = ET.Element("bounds")
-        e.set("minlat", "{:.07f}".format(self.miny))
-        e.set("minlon", "{:.07f}".format(self.minx))
-        e.set("maxlat", "{:.07f}".format(self.maxy))
-        e.set("maxlon", "{:.07f}".format(self.maxx))
-        return e
-
-
-# pretty print helper
-# http://effbot.org/zone/element-lib.htm#prettyprint
-def indent(elem, level=0):
-    i = "\n" + level * "  "
-    if len(elem):
-        if not elem.text or not elem.text.strip():
-            elem.text = i + "  "
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-        for elem in elem:
-            indent(elem, level + 1)
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-    else:
-        if level and (not elem.tail or not elem.tail.strip()):
-            elem.tail = i
 
 
 def augmented_diff(
@@ -83,6 +40,8 @@ def augmented_diff(
     See https://wiki.openstreetmap.org/wiki/Overpass_API/Augmented_Diffs
     This function should be called on an osmx_file that hasn't yet had osc_file
     written to it.
+
+    Raises `onramp.exceptions.EmptyDiffException` if no elements in osc_file
 
     """
 
@@ -111,6 +70,8 @@ def augmented_diff(
             actions[action_key] = Action(block.tag, e)
 
     action_list = [v for k, v in actions.items()]
+    if len(action_list) == 0:
+        raise EmptyDiffException()
 
     env = osmx.Environment(osmx_file)
     with osmx.Transaction(env) as txn:
@@ -220,8 +181,8 @@ def augmented_diff(
                 modified.set("visible", "false")
                 for child in list(modified):
                     modified.remove(child)
-                # TODO the Geofabrik deleted elements seem to have the old metadata and old version numbers
-                # check if this is true of planet replication files
+                # TODO: The Geofabrik deleted elements seem to have the old metadata and
+                # old version numbers. Check if this is true of planet replication files
                 new.append(modified)
             elif not_in_db(action.element):
                 # Typically occurs when:
@@ -299,10 +260,10 @@ def augmented_diff(
                 )
 
         # 4th pass:
-        # find changes that propagate to referencing elements:
-        # when a node's location changes, that propagates to any ways it belongs to, relations it belongs to
-        # and also any relations that the way belongs to
-        # when a way's member list changes, it propagates to any relations it belongs to
+        # Find changes that propagate to referencing elements:
+        # When a node's location changes, that propagates to any ways it belongs to,
+        # relations it belongs to and also any relations that the way belongs to.
+        # When a way's member list changes, it propagates to any relations it belongs to.
         node_way = osmx.NodeWay(txn)
         node_relation = osmx.NodeRelation(txn)
         way_relation = osmx.WayRelation(txn)
