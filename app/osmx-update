@@ -149,6 +149,8 @@ def main():
             )
             os.unlink(fp.name)
             current_id = current_id + 1
+            #  Improve log readability between entries with empty line
+            logger.info("")
 
     except BlockingIOError:
         logger.warning("Process is running - exiting.")
