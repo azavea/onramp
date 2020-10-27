@@ -53,14 +53,26 @@ def augmented_diff(
     for block in osc:
         for e in block:
             action_key = e.tag + "/" + e.get("id")
-            # Always ensure we're updating to the latest version of an object for the diff
             if action_key in actions:
-                newest_version = int(actions[action_key].element.get("version"))
-                e_version = int(e.get("version"))
-                if e_version < newest_version:
+                old_action = actions[action_key]
+                old_version = int(old_action.element.get("version"))
+                new_version = int(e.get("version"))
+                # Remove elements created and then deleted in the same interval
+                # TODO: This will not capture any element that is also modified
+                #       between create and delete.
+                if old_action.type == "create" and block.tag == "delete":
                     logger.warning(
-                        "Element {}, version {} is less than version {}".format(
-                            action_key, e_version, newest_version
+                        "Skipping element {} which was created and deleted within the interval".format(
+                            action_key
+                        )
+                    )
+                    del actions[action_key]
+                    continue
+                # Always ensure we're updating to the latest version of an object for the diff
+                elif new_version < old_version:
+                    logger.warning(
+                        "Skipping element {}, new version {} is older than version {}".format(
+                            action_key, new_version, old_version
                         )
                     )
                     continue
@@ -102,11 +114,9 @@ def augmented_diff(
                     ll = get_lat_lon(elem_id, False)
                     elem.set("lon", ll[0])
                     elem.set("lat", ll[1])
-                # If we fail to retrieve a location, it typically means:
-                # 1. A node was created and then deleted within the diff interval. In
-                #    the future we should remove these operations from the diff entirely.
-                # 2. OSMX db only contains locations for a bounding box and we've requested
-                #    a location that was trimmed during import.
+                # If we fail to retrieve a location, it typically means that the OSMX db only
+                # contains locations for a bounding box and we've requested a location that
+                # was trimmed during import.
                 # If you see this error, verify that you're seeing one of the cases above.
                 # If not open an issue!
                 except TypeError:
