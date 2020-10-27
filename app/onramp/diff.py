@@ -98,9 +98,19 @@ def augmented_diff(
             elem_id = int(elem.get("id"))
             if elem.tag == "node":
                 o = nodes.get(elem_id)
-                ll = get_lat_lon(elem_id, False)
-                elem.set("lon", ll[0])
-                elem.set("lat", ll[1])
+                try:
+                    ll = get_lat_lon(elem_id, False)
+                    elem.set("lon", ll[0])
+                    elem.set("lat", ll[1])
+                # If we fail to retrieve a location, it typically means:
+                # 1. A node was created and then deleted within the diff interval. In
+                #    the future we should remove these operations from the diff entirely.
+                # 2. OSMX db only contains locations for a bounding box and we've requested
+                #    a location that was trimmed during import.
+                # If you see this error, verify that you're seeing one of the cases above.
+                # If not open an issue!
+                except TypeError:
+                    logger.warning("No old loc found for node {}".format(elem_id))
             elif elem.tag == "way":
                 o = ways.get(elem_id)
                 for n in o.nodes:
@@ -125,26 +135,18 @@ def augmented_diff(
                     tag.set("v", next(it))
 
             if o:
+                # Set metadata
                 elem.set("version", str(o.metadata.version))
                 elem.set("user", str(o.metadata.user))
                 elem.set("uid", str(o.metadata.uid))
-                # convert to ISO8601 timestamp
                 timestamp = o.metadata.timestamp
                 formatted = datetime.utcfromtimestamp(timestamp).isoformat()
                 elem.set("timestamp", formatted + "Z")
                 elem.set("changeset", str(o.metadata.changeset))
             else:
                 # tagless nodes
-                try:
-                    version = locations.get(elem_id)[2]
-                except TypeError:
-                    # If loc is None here, it typically means that a node was created and
-                    # then deleted within the diff interval. In the future we should
-                    # remove these operations from the diff entirely.
-                    logger.warning(
-                        "No old loc found for tagless node {}".format(elem_id)
-                    )
-                    version = "?"
+                loc = locations.get(elem_id)
+                version = loc[2] if loc else "?"
                 elem.set("version", str(version))
                 elem.set("user", "?")
                 elem.set("uid", "?")
