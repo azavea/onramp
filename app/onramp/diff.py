@@ -96,31 +96,10 @@ def augmented_diff(
             else:
                 return not relations.get(elem_id)
 
-        def get_lat_lon(ref, use_new):
-            if use_new and ("node/" + ref in actions):
-                node = actions["node/" + ref]
-                lon = "{:.07f}".format(float(node.element.get("lon")))
-                lat = "{:.07f}".format(float(node.element.get("lat")))
-                return (lon, lat)
-            else:
-                ll = locations.get(ref)
-                return ("{:.07f}".format(ll[1]), "{:.07f}".format(ll[0]))
-
         def rebuild_old_element(elem):
             elem_id = int(elem.get("id"))
             if elem.tag == "node":
                 o = nodes.get(elem_id)
-                try:
-                    ll = get_lat_lon(elem_id, False)
-                    elem.set("lon", ll[0])
-                    elem.set("lat", ll[1])
-                # If we fail to retrieve a location, it typically means that the OSMX db only
-                # contains locations for a bounding box and we've requested a location that
-                # was trimmed during import.
-                # If you see this error, verify that you're seeing one of the cases above.
-                # If not open an issue!
-                except TypeError:
-                    logger.warning("No old loc found for node {}".format(elem_id))
             elif elem.tag == "way":
                 o = ways.get(elem_id)
                 for n in o.nodes:
@@ -215,10 +194,28 @@ def augmented_diff(
 
         # 3rd pass
         # Augment the created "old" and "new" elements
-        def augment_nd(nd, use_new):
-            ll = get_lat_lon(nd.get("ref"), use_new)
-            nd.set("lon", ll[0])
-            nd.set("lat", ll[1])
+        def get_lat_lon(ref, use_new):
+            if use_new and ("node/" + ref in actions):
+                node = actions["node/" + ref]
+                lon = "{:.07f}".format(float(node.element.get("lon")))
+                lat = "{:.07f}".format(float(node.element.get("lat")))
+                return (lon, lat)
+            else:
+                ll = locations.get(ref)
+                return ("{:.07f}".format(ll[1]), "{:.07f}".format(ll[0]))
+
+        def augment_nd(nd, use_new, id_field="id"):
+            nd_id = nd.get(id_field)
+            try:
+                ll = get_lat_lon(nd_id, use_new)
+                nd.set("lon", ll[0])
+                nd.set("lat", ll[1])
+            # If we fail to retrieve a location, it typically means that the OSMX db only
+            # contains locations for a bounding box and we've requested a location that
+            # was trimmed during import.
+            # If you see this error, verify this and if not, open an issue!
+            except TypeError:
+                logger.warning("No loc found for node {}".format(nd_id))
 
         def augment_member(mem, use_new):
             if mem.get("type") == "way":
@@ -227,27 +224,29 @@ def augmented_diff(
                     way = actions["way/" + ref]
                     for child in way.element:
                         if child.tag == "nd":
+                            # Don't use augment_nd because no ref on member nd children
                             ll = get_lat_lon(child.get("ref"), use_new)
                             nd = ET.SubElement(mem, "nd")
                             nd.set("lon", ll[0])
                             nd.set("lat", ll[1])
                 else:
                     for node_id in ways.get(ref).nodes:
+                        # Don't use augment_nd because no ref on member nd children
                         ll = get_lat_lon(str(node_id), use_new)
                         nd = ET.SubElement(mem, "nd")
                         nd.set("lon", ll[0])
                         nd.set("lat", ll[1])
             elif mem.get("type") == "node":
-                ll = get_lat_lon(mem.get("ref"), use_new)
-                mem.set("lon", ll[0])
-                mem.set("lat", ll[1])
+                augment_nd(mem, use_new, id_field="ref")
 
         def augment(elem, use_new):
-            if elem.tag == "way":
+            if elem.tag == "node":
+                augment_nd(elem, use_new, id_field="id")
+            elif elem.tag == "way":
                 for child in elem:
                     if child.tag == "nd":
-                        augment_nd(child, use_new)
-            elif elem:
+                        augment_nd(child, use_new, id_field="ref")
+            elif elem.tag == "relation":
                 for child in elem:
                     if child.tag == "member":
                         augment_member(child, use_new)
