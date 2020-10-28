@@ -53,14 +53,26 @@ def augmented_diff(
     for block in osc:
         for e in block:
             action_key = e.tag + "/" + e.get("id")
-            # Always ensure we're updating to the latest version of an object for the diff
             if action_key in actions:
-                newest_version = int(actions[action_key].element.get("version"))
-                e_version = int(e.get("version"))
-                if e_version < newest_version:
+                old_action = actions[action_key]
+                old_version = int(old_action.element.get("version"))
+                new_version = int(e.get("version"))
+                # Remove elements created and then deleted in the same interval
+                # TODO: This will not capture any element that is also modified
+                #       between create and delete.
+                if old_action.type == "create" and block.tag == "delete":
                     logger.warning(
-                        "Element {}, version {} is less than version {}".format(
-                            action_key, e_version, newest_version
+                        "Skipping element {} which was created and deleted within the interval".format(
+                            action_key
+                        )
+                    )
+                    del actions[action_key]
+                    continue
+                # Always ensure we're updating to the latest version of an object for the diff
+                elif new_version < old_version:
+                    logger.warning(
+                        "Skipping element {}, new version {} is older than version {}".format(
+                            action_key, new_version, old_version
                         )
                     )
                     continue
@@ -84,23 +96,10 @@ def augmented_diff(
             else:
                 return not relations.get(elem_id)
 
-        def get_lat_lon(ref, use_new):
-            if use_new and ("node/" + ref in actions):
-                node = actions["node/" + ref]
-                lon = "{:.07f}".format(float(node.element.get("lon")))
-                lat = "{:.07f}".format(float(node.element.get("lat")))
-                return (lon, lat)
-            else:
-                ll = locations.get(ref)
-                return ("{:.07f}".format(ll[1]), "{:.07f}".format(ll[0]))
-
         def rebuild_old_element(elem):
             elem_id = int(elem.get("id"))
             if elem.tag == "node":
                 o = nodes.get(elem_id)
-                ll = get_lat_lon(elem_id, False)
-                elem.set("lon", ll[0])
-                elem.set("lat", ll[1])
             elif elem.tag == "way":
                 o = ways.get(elem_id)
                 for n in o.nodes:
@@ -125,26 +124,18 @@ def augmented_diff(
                     tag.set("v", next(it))
 
             if o:
+                # Set metadata
                 elem.set("version", str(o.metadata.version))
                 elem.set("user", str(o.metadata.user))
                 elem.set("uid", str(o.metadata.uid))
-                # convert to ISO8601 timestamp
                 timestamp = o.metadata.timestamp
                 formatted = datetime.utcfromtimestamp(timestamp).isoformat()
                 elem.set("timestamp", formatted + "Z")
                 elem.set("changeset", str(o.metadata.changeset))
             else:
                 # tagless nodes
-                try:
-                    version = locations.get(elem_id)[2]
-                except TypeError:
-                    # If loc is None here, it typically means that a node was created and
-                    # then deleted within the diff interval. In the future we should
-                    # remove these operations from the diff entirely.
-                    logger.warning(
-                        "No old loc found for tagless node {}".format(elem_id)
-                    )
-                    version = "?"
+                loc = locations.get(elem_id)
+                version = loc[2] if loc else "?"
                 elem.set("version", str(version))
                 elem.set("user", "?")
                 elem.set("uid", "?")
@@ -203,10 +194,28 @@ def augmented_diff(
 
         # 3rd pass
         # Augment the created "old" and "new" elements
-        def augment_nd(nd, use_new):
-            ll = get_lat_lon(nd.get("ref"), use_new)
-            nd.set("lon", ll[0])
-            nd.set("lat", ll[1])
+        def get_lat_lon(ref, use_new):
+            if use_new and ("node/" + ref in actions):
+                node = actions["node/" + ref]
+                lon = "{:.07f}".format(float(node.element.get("lon")))
+                lat = "{:.07f}".format(float(node.element.get("lat")))
+                return (lon, lat)
+            else:
+                ll = locations.get(ref)
+                return ("{:.07f}".format(ll[1]), "{:.07f}".format(ll[0]))
+
+        def augment_nd(nd, use_new, id_field="id"):
+            nd_id = nd.get(id_field)
+            try:
+                ll = get_lat_lon(nd_id, use_new)
+                nd.set("lon", ll[0])
+                nd.set("lat", ll[1])
+            # If we fail to retrieve a location, it typically means that the OSMX db only
+            # contains locations for a bounding box and we've requested a location that
+            # was trimmed during import.
+            # If you see this error, verify this and if not, open an issue!
+            except TypeError:
+                logger.warning("No loc found for node {}".format(nd_id))
 
         def augment_member(mem, use_new):
             if mem.get("type") == "way":
@@ -215,27 +224,29 @@ def augmented_diff(
                     way = actions["way/" + ref]
                     for child in way.element:
                         if child.tag == "nd":
+                            # Don't use augment_nd because no ref on member nd children
                             ll = get_lat_lon(child.get("ref"), use_new)
                             nd = ET.SubElement(mem, "nd")
                             nd.set("lon", ll[0])
                             nd.set("lat", ll[1])
                 else:
                     for node_id in ways.get(ref).nodes:
+                        # Don't use augment_nd because no ref on member nd children
                         ll = get_lat_lon(str(node_id), use_new)
                         nd = ET.SubElement(mem, "nd")
                         nd.set("lon", ll[0])
                         nd.set("lat", ll[1])
             elif mem.get("type") == "node":
-                ll = get_lat_lon(mem.get("ref"), use_new)
-                mem.set("lon", ll[0])
-                mem.set("lat", ll[1])
+                augment_nd(mem, use_new, id_field="ref")
 
         def augment(elem, use_new):
-            if elem.tag == "way":
+            if elem.tag == "node":
+                augment_nd(elem, use_new, id_field="id")
+            elif elem.tag == "way":
                 for child in elem:
                     if child.tag == "nd":
-                        augment_nd(child, use_new)
-            elif elem:
+                        augment_nd(child, use_new, id_field="ref")
+            elif elem.tag == "relation":
                 for child in elem:
                     if child.tag == "member":
                         augment_member(child, use_new)
