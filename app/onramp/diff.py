@@ -135,12 +135,12 @@ def augmented_diff(
             else:
                 # tagless nodes
                 loc = locations.get(elem_id)
-                version = loc[2] if loc else "?"
+                version = loc[2] if loc else "0"
                 elem.set("version", str(version))
-                elem.set("user", "?")
-                elem.set("uid", "?")
-                elem.set("timestamp", "?")
-                elem.set("changeset", "?")
+                elem.set("user", "")
+                elem.set("uid", "0")
+                elem.set("timestamp", "1970-01-01T00:00:00Z")
+                elem.set("changeset", "0")
 
         # 2nd pass
         # create an XML tree of actions with old and new sub-elements
