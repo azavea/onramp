@@ -24,6 +24,14 @@ In addition to the above, note that Overpass API augmented diffs to not report a
 
 Onramp conforms to the augmented diff schema used by Overpass and presented in the OSM Wiki.
 
+#### Onramp Augmented Diff Metadata for Untagged Nodes
+
+Onramp relies on [OSMExpress](https://github.com/protomaps/osmexpress) to reconstruct augmented diffs from OSM change files. OSMExpress does not store metadata other than version for nodes that do not have tags [osmexpress#12](https://github.com/protomaps/OSMExpress/issues/12)[osmexpress#25](https://github.com/protomaps/OSMExpress/issues/25). Since these untagged nodes typically form the points of way objects, not writing metadata for them was deemed an acceptable tradeoff to keep the OSMExpress database size down since the interesting metadata is on the parent way.
+
+To improve compatibility with downstream services consuming augmented diffs, whenever we don't know a metadata value we write the default value [as defined by libosmium](https://github.com/osmcode/libosmium/blob/master/include/osmium/osm/object.hpp#L69-L74).
+
+If you encounter a use case for augmented diffs where this limitation affects you, please open an Onramp issue.
+
 ### Changesets and Changeset Boundaries
 
 **Changeset:** For the purposes of this section, we are referring to an "Osmosis changeset" as described in the glossary below, _not_ an "API changeset".
