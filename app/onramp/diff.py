@@ -152,6 +152,15 @@ def augmented_diff(
         )
 
         for action in action_list:
+            # This occurs when an element is created and then deleted before the end of the
+            # temporal window we're diffing
+            if not_in_db(action.element) and action.type == "delete":
+                logger.warning(
+                    "Could not find {} {} in db, skipping".format(
+                        action.element.tag, action.element.get("id")
+                    )
+                )
+                continue
             a = ET.SubElement(o, "action")
             a.set("type", action.type)
             if action.type == "create":
@@ -313,8 +322,8 @@ def augmented_diff(
             new = ET.SubElement(a, "new")
             new_elem = copy.deepcopy(way_element)
             new.append(new_elem)
-            augment(way_element, False)
-            augment(new_elem, True)
+            augment(way_element, use_new=False)
+            augment(new_elem, use_new=True)
 
         for r in affected_relations:
             old = ET.Element("old")
@@ -334,6 +343,7 @@ def augmented_diff(
                 a.append(old)
                 a.append(new)
             except (TypeError, AttributeError):
+                # This happens when working with OSM subset and portion of relation is outside of crop BBOX
                 logger.warning("Affected relation {0} is incomplete in db".format(r))
 
     # 5th pass: add bounding boxes
@@ -349,6 +359,7 @@ def augmented_diff(
                     bounds = Bounds()
                     for nd in nds:
                         bounds.add(float(nd.get("lon")), float(nd.get("lat")))
+
                     osm_obj.insert(0, bounds.elem())
 
     # 6th pass
