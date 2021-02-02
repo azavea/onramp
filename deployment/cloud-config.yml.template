@@ -18,7 +18,7 @@ runcmd:
 - cd /opt/onramp/app
 - git checkout %%GIT_COMMIT%%
 # Install Python dependencies
-- su - ubuntu -c "python3 -m venv ./venv"
+- su - ubuntu -c "python3 -m venv /opt/onramp/app/venv"
 - ./venv/bin/pip install wheel
 - ./venv/bin/pip install -r requirements.txt
 # Initial invocation of osmx-update
