@@ -100,6 +100,12 @@ def augmented_diff(
             elem_id = int(elem.get("id"))
             if elem.tag == "node":
                 o = nodes.get(elem_id)
+                if o is not None:
+                    it = iter(o.tags)
+                    for t in it:
+                        tag = ET.SubElement(elem, "tag")
+                        tag.set("k", t)
+                        tag.set("v", next(it))
             elif elem.tag == "way":
                 o = ways.get(elem_id)
                 for n in o.nodes:
